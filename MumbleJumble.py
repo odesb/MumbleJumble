@@ -35,13 +35,13 @@ def get_arg_value(arg, args_list, default=None):
         sys.exit('Parameter ' + arg + ' is missing!')
         
 
-class MumbleJukeBox:
+class MumbleJumble:
     """Represents the Mumble client interacting with users and outputting sound
     """
     def __init__(self):
         host = get_arg_value('--server', sys.argv[1:])
         port = int(get_arg_value('--port', sys.argv[1:], default=64738))
-        user = get_arg_value('--user', sys.argv[1:], default='@MumbleJukeBox')
+        user = get_arg_value('--user', sys.argv[1:], default='@MumbleJumble')
         password = get_arg_value('--password', sys.argv[1:], default='')
         certfile = get_arg_value('--certfile', sys.argv[1:], default=None)
         reconnect = get_arg_value('--reconnect', sys.argv[1:], default=False)
@@ -141,8 +141,8 @@ class MumbleJukeBox:
 
                 elif command == 'c' or command == 'clear':
                     self.skipFlag = True
-                    self.subthread.url_list = deque([])
-                    self.subthread.song_queue = deque([])
+                    self.threads['yt_thread'].new_songs = deque([])
+                    self.audio_queue = deque([])
 
                 elif command == 'p' or command == 'pause':
                     self.toggle_pause()
@@ -186,7 +186,7 @@ class MumbleJukeBox:
         subthread. Possible states: Paused, Playing, Ready, Downloading.
         """
         queue = []
-        if len(self.audio_queue) + len(self.threads['yt_thread'].url_list) == 0:
+        if len(self.audio_queue) + len(self.threads['yt_thread'].new_songs) == 0:
             return 'Queue is empty'
         else:
             for i in range(len(self.audio_queue)):
@@ -199,8 +199,8 @@ class MumbleJukeBox:
                                 (self.audio_queue[i].title, self.current_song_status()))
                 else:
                     queue.append(self.audio_queue[i].title + ' <b>Ready</b>')
-            for j in range(len(self.threads['yt_thread'].url_list)):
-                queue.append(self.threads['yt_thread'].url_list[j] + ' <b>Downloading</b>')
+            for j in range(len(self.threads['yt_thread'].new_songs)):
+                queue.append(self.threads['yt_thread'].new_songs[j].title + ' <b>Downloading</b>')
             return ', '.join(queue)
 
 
@@ -244,4 +244,4 @@ class MumbleJukeBox:
 
 
 if __name__ == '__main__':
-    musicbot = MumbleJukeBox()
+    musicbot = MumbleJumble()

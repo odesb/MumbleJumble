@@ -24,7 +24,7 @@ def call(bot, command_used, arguments):
             except:
                 bot.send_msg_current_channel('Could not retrieve URL')
                 return
-            # Subthread will process its newly populated url_list
+            # Subthread will process its newly populated new songs list
             bot.threads['yt_thread'].new_songs.append(Song(short_url))
 
 
@@ -49,22 +49,23 @@ class YTThread(threading.Thread):
     """
     def __init__(self, parent):
         threading.Thread.__init__(self)
-        self.url_list = deque([]) #Queue of URL to process
+        self.new_songs = deque([]) #Queue of URL to process
         self.parent = parent
         self.index = None
 
 
     def run(self):
         while True:
-            if len(self.url_list) > 0: #List gets populated when !a is invoked
-                song = Song(self.url_list[0]) #Takes care of the first one
-                self.parent.send_msg_current_channel('Adding ' + '<b>' + self.new_songs[0].title
-                                                + '</b>' + ' to the queue.')
-                if not os.path.exists(song.dl_folder + song.short_url):
+            if len(self.new_songs) > 0: #List gets populated when !a is invoked
+                song = self.new_songs[0]
+                self.parent.send_msg_current_channel('Adding ' + '<b>' 
+                                                     + song.title
+                                                     + '</b>' + ' to the queue.')
+                if not os.path.exists(song.dl_folder + song.title):
                     song.download()
                 song.convert_split()
                 self.parent.audio_queue.append(song)
-                self.url_list.popleft() #Done with processing the first URL
+                self.new_songs.popleft() #Done with processing the first URL
             else:
                 time.sleep(0.1)
 
@@ -75,7 +76,7 @@ class Song:
         self.samples = dict() # Will contain each samples and total # of samples
         self.short_url = short_url # Youtube short URL
         self.title = get_audio_title(self.short_url)
-        self.dl_folder = './.song_library'
+        self.dl_folder = './.song_library/'
         self.pipe = None
 
 
