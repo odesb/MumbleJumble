@@ -22,7 +22,7 @@ def call(bot, command_used, arguments):
     if short_url == -1:
         bot.send_msg_current_channel('Could not retrieve URL')
         return
-    # Subthread will process its newly populated new songs list
+    # Subthread will process its newly populated songs list
     bot.threads['yt_thread'].new_songs.append(Song(short_url))
 
 

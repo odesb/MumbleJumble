@@ -194,11 +194,13 @@ class MumbleJumble:
 
             else:
                 if command == 's' or command == 'skip':
-                    if int(arguments) > 1:
+                    if select > 1:
                         try:
-                            self.audio_queue.remove(self.audio_queue[int(arguments) - 1])
-                        except IndexError:
-                            self.send_msg_current_channel('Invalid index!')
+                            select = int(arguments)
+                            self.audio_queue.remove(self.audio_queue[select - 1])
+                        except:
+                            self.send_msg_current_channel('Not a valid value!')
+                            return
                     else:
                         self.skipFlag = True
 
