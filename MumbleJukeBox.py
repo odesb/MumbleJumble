@@ -1,7 +1,9 @@
 #!/usr/bin/env python
+from __future__ import print_function
 
 from collections import deque
 import os
+import imp
 import sys
 import subprocess as sp
 import audioop
@@ -68,6 +70,12 @@ class MumbleJukeBox:
         # Sets to bot to call command_received when a user sends text
         self.bot.callbacks.set_callback('text_received', self.command_received)
 
+        self.registered_commands = {}
+
+        self.setup()
+        self.loop() # Loops the main thread
+
+    def setup(self):
         self.volume = 1.00
         self.paused = False
         self.skipFlag = False
@@ -79,8 +87,33 @@ class MumbleJukeBox:
         self.subthread = SubThread()
         self.subthread.daemon = True
         self.subthread.start()
-        self.loop() # Loops the main thread
 
+        home = os.path.dirname(__file__)
+        filenames = []
+        for fn in os.listdir(os.path.join(home, 'modules')): 
+            if fn.endswith('.py') and not fn.startswith('_'): 
+                filenames.append(os.path.join(home, 'modules', fn))
+
+        modules = []
+        for filename in filenames: 
+            name = os.path.basename(filename)[:-3]
+            try: module = imp.load_source(name, filename)
+            except Exception as e:
+                print(e)
+            modules.append(module)
+        for module in modules:
+            print("Loaded module '{0}'".format(module.__name__))
+        if hasattr(module, 'register'): 
+            module.register(self)
+            for command in module.register.commands:
+                if command in self.registered_commands.keys():
+                    print("Command '{0}' already registered by another module".format(command), file=sys.stderr)
+                    sys.exit(1)
+                else:
+                    print("  Registering '{0}' - for module '{1}'".format(command, module.__name__))
+                    self.registered_commands[command] = module.call
+        else:
+            print("Could not register '{0}', for it is missing the 'register' function".format(module), file=sys.stderr)
 
     def get_current_channel(self):
         """Get the bot's current channel (a dict)"""
@@ -152,9 +185,8 @@ class MumbleJukeBox:
             elif command == 'v' or command == 'vol' or command == 'volume':
                 self.send_msg_current_channel('Current volume: ' + '<b>'
                                               + str(self.volume) + '</b>')
-
-            else:
-                return
+            if command in self.registered_commands.keys():
+                self.registered_commands[command](self, message)
 
 
     def printable_queue(self):
