@@ -107,17 +107,21 @@ class MumbleJukeBox:
             modules.append(module)
         for module in modules:
             print("Loaded module '{0}'".format(module.__name__))
-            if hasattr(module, 'register'): 
-                module.register(self)
-                for command in module.register.commands:
-                    if command in self.registered_commands.keys():
-                        print("Command '{0}' already registered by another module".format(command), file=sys.stderr)
-                        sys.exit(1)
-                    else:
-                        print("  Registering '{0}' - for module '{1}'".format(command, module.__name__))
-                        self.registered_commands[command] = module.call
-            else:
-                print("Could not register '{0}', for it is missing the 'register' function".format(module), file=sys.stderr)
+            try:
+                if hasattr(module, 'register'): 
+                    module.register(self)
+                    for command in module.register.commands:
+                        if command in self.registered_commands.keys():
+                            print("Command '{0}' already registered by another module".format(command), file=sys.stderr)
+                            sys.exit(1)
+                        else:
+                            print("  Registering '{0}' - for module '{1}'".format(command, module.__name__))
+                            self.registered_commands[command] = module.call
+                else:
+                    print("Could not register '{0}', for it is missing the 'register' function".format(module), file=sys.stderr)
+            except Exception as e:
+                print("Error registering module '{0}'".format(module.__name__))
+                traceback.print_exc()
 
     def get_current_channel(self):
         """Get the bot's current channel (a dict)"""
@@ -190,10 +194,11 @@ class MumbleJukeBox:
                 self.send_msg_current_channel('Current volume: ' + '<b>'
                                               + str(self.volume) + '</b>')
             if command in self.registered_commands.keys():
-                command_used = message[0]
-                arguments = message[1:]
+                command_used = message[0] 
+                message.pop(0)
+                arguments = " ".join(message)
                 try:
-                    self.registered_commands[command](self, str(command_used), str(arguments))
+                    self.registered_commands[command](self, str(command_used), arguments)
                 except Exception as e:
                     print("Error handling command '{0}':".format(command))
                     traceback.print_exc()
