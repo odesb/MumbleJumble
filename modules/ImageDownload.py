@@ -1,6 +1,5 @@
 import urllib
 import uuid
-import nltk
 
 from urllib import urlopen
 IMAGE_CACHE=".image_cache"
