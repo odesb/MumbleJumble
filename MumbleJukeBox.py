@@ -133,15 +133,19 @@ class MumbleJukeBox:
             message = message[1:].split(' ', 1)
             command = message[0]
             if len(message) > 1:
-                parameter = message[1]
-                if command == 'v' or command == 'vol' or command == 'volume':
+                arguments = message[1]
+            if command == 'v' or command == 'vol' or command == 'volume':
+                if len(message) > 1:
                     try:
-                        self.volume = float(parameter)
+                        self.volume = float(arguments)
                         self.send_msg_current_channel('Changing volume to '
-                                                  + '<b>' + str(self.volume)
-                                                  + '</b>')
+                                                      + '<b>' + str(self.volume)
+                                                      + '</b>')
                     except ValueError:
                         self.send_msg_current_channel('Not a valid value!')
+                else:
+                    self.send_msg_current_channel('Current volume: ' + '<b>'
+                                              + str(self.volume) + '</b>')
 
             elif command == 'c' or command == 'clear':
                 self.skipFlag = True
@@ -157,9 +161,6 @@ class MumbleJukeBox:
             elif command == 's' or command == 'skip':
                 self.skipFlag = True
 
-            elif command == 'v' or command == 'vol' or command == 'volume':
-                self.send_msg_current_channel('Current volume: ' + '<b>'
-                                              + str(self.volume) + '</b>')
             elif command in self.registered_commands.keys():
                 command_used = message[0]
                 arguments = message[1:]
@@ -183,23 +184,21 @@ class MumbleJukeBox:
         subthread. Possible states: Paused, Playing, Ready, Downloading.
         """
         queue = []
-        if len(self.subthread.song_queue) + len(self.subthread.url_list) == 0:
+        if len(self.audio_queue) + len(self.threads[self.threads.index(yt_thread)].url_list) == 0:
             return 'Queue is empty'
         else:
-            for i in range(len(self.subthread.song_queue)):
+            for i in range(len(self.audio_queue)):
                 if i == 0:
                     if self.paused:
                         queue.append('%s <b>Paused - %i %%</b>' %
-                                (self.subthread.song_queue[i].short_url,
-                                 self.current_song_status()))
+                                (self.audio_queue[i].title, self.current_song_status()))
                     elif not self.paused:
                         queue.append('%s <b>Playing - %i %%</b>' %
-                                (self.subthread.song_queue[i].short_url,
-                                 self.current_song_status()))
+                                (self.audio_queue[i].title, self.current_song_status()))
                 else:
-                    queue.append(self.subthread.song_queue[i].short_url + ' <b>Ready</b>')
-            for j in range(len(self.subthread.url_list)):
-                queue.append(self.subthread.url_list[j] + ' <b>Downloading</b>')
+                    queue.append(self.audio_queue[i].title + ' <b>Ready</b>')
+            for j in range(len(self.threads[self.threads.index(yt_thread)].url_list)):
+                queue.append(self.threads[self.threads.index(yt_thread)].url_list[j] + ' <b>Downloading</b>')
             return ', '.join(queue)
 
 

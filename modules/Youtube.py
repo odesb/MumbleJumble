@@ -3,6 +3,7 @@ import threading
 import time
 import os
 import subprocess as sp
+import pafy
 
 
 def call(bot, command_used, arguments):
@@ -20,8 +21,6 @@ def call(bot, command_used, arguments):
             except:
                 bot.send_msg_current_channel('Could not retrieve URL')
                 return
-            bot.send_msg_current_channel('Adding ' + '<b>' + short_url
-                                         + '</b>' + ' to queue.')
             # Subthread will process its newly populated url_list
             bot.threads[t_index].url_list.append(short_url)
 
@@ -35,8 +34,11 @@ def get_short_url(message):
             return message[start:start + 11]
     
 
+def get_audio_title(short_url):
+    url = 'https://www.youtube.com/watch?v=' + short_url
+    return pafy.new(url).title
 
-    
+
 class YTThread(threading.Thread):
     """A subthread of the main thread, takes care of downloading, converting and
     splitting audio files, while the main thread is busy outputting sound to the
@@ -46,15 +48,15 @@ class YTThread(threading.Thread):
         threading.Thread.__init__(self)
         self.url_list = deque([]) #Queue of URL to process
         self.parent = parent
-        self.dl_folder = parent.dl_folder
 
 
     def run(self):
         while True:
             if len(self.url_list) > 0: #List gets populated when !a is invoked
                 song = Song(self.url_list[0]) #Takes care of the first one
-                song.dl_folder = self.dl_folder
-                if not os.path.exists(self.dl_folder + song.short_url):
+                self.parent.send_msg_current_channel('Adding ' + '<b>' + song.title
+                                                + '</b>' + ' to the queue.')
+                if not os.path.exists(song.dl_folder + song.short_url):
                     song.download()
                 song.convert_split()
                 self.parent.audio_queue.append(song)
@@ -68,7 +70,8 @@ class Song:
     def __init__(self, short_url):
         self.samples = dict() # Will contain each samples and total # of samples
         self.short_url = short_url # Youtube short URL
-        self.dl_folder = None
+        self.title = get_audio_title(self.short_url)
+        self.dl_folder = './.song_library'
         self.pipe = None
 
 
