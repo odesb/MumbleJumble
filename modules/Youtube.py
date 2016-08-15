@@ -17,14 +17,12 @@ register.commands = ['a', 'add']
 
 
 def call(bot, command_used, arguments):
-    if arguments:
-        if command_used == 'a' or command_used == 'add':
-            short_url = get_short_url(arguments)
-            if short_url == -1:
-                bot.send_msg_current_channel('Could not retrieve URL')
-                return
-            # Subthread will process its newly populated new songs list
-            bot.threads['yt_thread'].new_songs.append(Song(short_url))
+    short_url = get_short_url(arguments)
+    if short_url == -1:
+        bot.send_msg_current_channel('Could not retrieve URL')
+        return
+    # Subthread will process its newly populated new songs list
+    bot.threads['yt_thread'].new_songs.append(Song(short_url))
 
 
 def get_short_url(message):
