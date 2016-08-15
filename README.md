@@ -1,6 +1,6 @@
-# MumbleJukebox
+# MumbleJumble
 
-Mumble Youtube player based on [azlux/pymumble](https://github.com/azlux/pymumble). Check back later.
+Mumble Bot based on [azlux/pymumble](https://github.com/azlux/pymumble). Check back later.
 
 # Requirements
 opuslib
