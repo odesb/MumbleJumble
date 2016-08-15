@@ -8,16 +8,11 @@ import sys
 import audioop
 import time
 import traceback
-import thread
 
 # Add pymumble folder to python PATH for importing
 sys.path.append(os.path.join(os.path.dirname(__file__), "pymumble"))
 import pymumble
 
-class MumbleModule(object):
-    def __init__(self, call, background):
-        self.call = call
-        self.background = background
 
 def get_arg_value(arg, args_list, default=None):
     """Retrieves the values associated to command line arguments
@@ -93,23 +88,17 @@ class MumbleJumble:
                 print(e)
             modules.append(module)
         for module in modules:
+            print("Loaded module '{0}'".format(module.__name__))
             try:
                 if hasattr(module, 'register'): 
                     module.register(self)
-                    module_run_background = False
-                    if hasattr(module.register, 'background'):
-                        module_run_background = module.register.background
-                    print("Loading module '{0}' {1}".format(module.__name__, ("(background)" if module_run_background else "")))
-                    module_object = MumbleModule(module.call, module_run_background)
-
                     for command in module.register.commands:
                         if command in self.registered_commands.keys():
                             print("Command '{0}' already registered by another module".format(command), file=sys.stderr)
                             sys.exit(1)
                         else:
                             print("  Registering '{0}' - for module '{1}'".format(command, module.__name__))
-                            self.registered_commands[command] = module_object
-
+                            self.registered_commands[command] = module.call
                 else:
                     print("Could not register '{0}', for it is missing the 'register' function".format(module), file=sys.stderr)
             except Exception as e:
@@ -143,7 +132,7 @@ class MumbleJumble:
         s, skip         Skips the song currently playing
         v, vol, volume  Returns the current volume or changes it
         """
-        message = text.message.split()
+        message = text.message.split(' ',1)
         if message[0].startswith('!'):
             command = message[0][1:]
             if len(message) == 1:
@@ -179,12 +168,7 @@ class MumbleJumble:
 
                 elif command in self.registered_commands.keys():
                     try:
-                        module_object = self.registered_commands[command] 
-                        if module_object.background:
-                            print("Calling in background thread")
-                            thread.start_new_thread(lambda: module_object.call(self, str(command), str(arguments)), ())
-                        else:
-                            module_object.call(self, str(command), str(arguments))
+                        self.registered_commands[command](self, str(command), str(arguments))
                     except Exception as e:
                         print("Error handling command '{0}':".format(command))
                         traceback.print_exc()

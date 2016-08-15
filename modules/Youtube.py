@@ -19,9 +19,8 @@ register.commands = ['a', 'add']
 def call(bot, command_used, arguments):
     if arguments:
         if command_used == 'a' or command_used == 'add':
-            try:
-                short_url = get_short_url(arguments)
-            except:
+            short_url = get_short_url(arguments)
+            if short_url == -1:
                 bot.send_msg_current_channel('Could not retrieve URL')
                 return
             # Subthread will process its newly populated new songs list
@@ -35,6 +34,7 @@ def get_short_url(message):
         if i in message:
             start = message.find(i) + len(i)
             return message[start:start + 11]
+    return -1
     
 
 def get_audio_title(short_url):
