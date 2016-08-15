@@ -143,7 +143,7 @@ class MumbleJumble:
         s, skip         Skips the song currently playing
         v, vol, volume  Returns the current volume or changes it
         """
-        message = text.message.split()
+        message = text.message.split(' ', 1)
         if message[0].startswith('!'):
             command = message[0][1:]
             if len(message) == 1:
@@ -167,7 +167,7 @@ class MumbleJumble:
                     self.skipFlag = True
 
             else:
-                arguments = message[1]
+                arguments = "".join(message[1]).strip(" ")
                 if command == 'v' or command == 'vol' or command == 'volume':
                     try:
                         self.volume = float(arguments)

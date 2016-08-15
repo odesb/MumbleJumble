@@ -26,7 +26,7 @@ def resize(original, desired_quality, scale_factor):
     resized_width = int(width*scale_factor)
     resized_height = int(height*scale_factor)
     if scale_factor is not 1:
-        image.resize((resized_width, resized_height), Image.ANTIALIAS) 
+        image = image.resize((resized_width, resized_height), Image.ANTIALIAS) 
     image.save(resized_filename, quality=desired_quality, optimize=True)
     file_size = os.stat(resized_filename).st_size
     print("Resizing image '{0}' with quality '{1}' and size factor '{2}' ({3}x{4}) - new filesize: {5}".format(resized_filename, desired_quality, scale_factor, resized_width, resized_height, file_size))
@@ -42,6 +42,8 @@ def call(bot, command_used, arguments):
     text = str(soup.get_text().encode('utf-8'))
     sha_1 = hashlib.sha1()
     sha_1.update(text)
+
+    print(command_used, arguments)
 
     # reuse file names
     unique_filename = str(sha_1.hexdigest())
