@@ -54,8 +54,8 @@ class MumbleJukeBox:
         # Sets to bot to call command_received when a user sends text
         self.bot.callbacks.set_callback('text_received', self.command_received)
 
-        self.threads = {} # List of threads running, excluding the main thread
-        self.audio_queue = deque([])
+        self.threads = {} # Dict of threads running, excluding the main thread
+        self.audio_queue = deque([]) # Queue of audio ready to be sent
 
         self.bot.start() # Start the mumble thread
 
@@ -133,43 +133,43 @@ class MumbleJukeBox:
         if message[0] == '!':
             message = message[1:].split(' ', 1)
             command = message[0]
-            if len(message) > 1:
-                arguments = message[1]
-            if command == 'v' or command == 'vol' or command == 'volume':
-                if len(message) > 1:
-                    try:
-                        self.volume = float(arguments)
-                        self.send_msg_current_channel('Changing volume to '
-                                                      + '<b>' + str(self.volume)
-                                                      + '</b>')
-                    except ValueError:
-                        self.send_msg_current_channel('Not a valid value!')
-                else:
+            if len(message) == 1:
+
+                if command == 'v' or command == 'vol' or command == 'volume':
                     self.send_msg_current_channel('Current volume: ' + '<b>'
                                               + str(self.volume) + '</b>')
 
-            elif command == 'c' or command == 'clear':
-                self.skipFlag = True
-                self.subthread.url_list = deque([])
-                self.subthread.song_queue = deque([])
+                elif command == 'c' or command == 'clear':
+                    self.skipFlag = True
+                    self.subthread.url_list = deque([])
+                    self.subthread.song_queue = deque([])
 
-            elif command == 'p' or command == 'pause':
-                self.toggle_pause()
+                elif command == 'p' or command == 'pause':
+                    self.toggle_pause()
 
-            elif command == 'q' or command == 'queue':
-                self.send_msg_current_channel(self.printable_queue())
+                elif command == 'q' or command == 'queue':
+                    self.send_msg_current_channel(self.printable_queue())
 
-            elif command == 's' or command == 'skip':
-                self.skipFlag = True
+                elif command == 's' or command == 'skip':
+                    self.skipFlag = True
 
-            elif command in self.registered_commands.keys():
-                command_used = message[0]
-                arguments = message[1:]
-                try:
-                    self.registered_commands[command](self, str(command_used), str(arguments))
-                except Exception as e:
-                    print("Error handling command '{0}':".format(command))
-                    traceback.print_exc()
+            else:
+                arguments = message[1]
+                if command == 'v' or command == 'vol' or command == 'volume':
+                    try:
+                        self.volume = float(arguments)
+                        self.send_msg_current_channel('Changing volume to '
+                                                          + '<b>' + str(self.volume)
+                                                          + '</b>')
+                    except ValueError:
+                        self.send_msg_current_channel('Not a valid value!')
+
+                elif command in self.registered_commands.keys():
+                    try:
+                        self.registered_commands[command](self, str(command), str(arguments))
+                    except Exception as e:
+                        print("Error handling command '{0}':".format(command))
+                        traceback.print_exc()
 
 
     def current_song_status(self):
@@ -177,7 +177,8 @@ class MumbleJukeBox:
         command.
         """
         return float(self.current_song_sample) / float(
-                self.subthread.song_queue[0].samples['total_samples']) * 100
+                self.audio_queue[0].samples['total_samples']) * 100
+
 
     def printable_queue(self):
         """Creates a printable queue suited for the Mumble chat. Associated with
@@ -185,7 +186,7 @@ class MumbleJukeBox:
         subthread. Possible states: Paused, Playing, Ready, Downloading.
         """
         queue = []
-        if len(self.audio_queue) + len(self.threads[self.threads.index(yt_thread)].url_list) == 0:
+        if len(self.audio_queue) + len(self.threads['yt_thread'].url_list) == 0:
             return 'Queue is empty'
         else:
             for i in range(len(self.audio_queue)):
@@ -198,8 +199,8 @@ class MumbleJukeBox:
                                 (self.audio_queue[i].title, self.current_song_status()))
                 else:
                     queue.append(self.audio_queue[i].title + ' <b>Ready</b>')
-            for j in range(len(self.threads[self.threads.index(yt_thread)].url_list)):
-                queue.append(self.threads[self.threads.index(yt_thread)].url_list[j] + ' <b>Downloading</b>')
+            for j in range(len(self.threads['yt_thread'].url_list)):
+                queue.append(self.threads['yt_thread'].url_list[j] + ' <b>Downloading</b>')
             return ', '.join(queue)
 
 

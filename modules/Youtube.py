@@ -25,7 +25,7 @@ def call(bot, command_used, arguments):
                 bot.send_msg_current_channel('Could not retrieve URL')
                 return
             # Subthread will process its newly populated url_list
-            bot.threads['yt_thread'].url_list.append(short_url)
+            bot.threads['yt_thread'].new_songs.append(Song(short_url))
 
 
 def get_short_url(message):
@@ -58,7 +58,7 @@ class YTThread(threading.Thread):
         while True:
             if len(self.url_list) > 0: #List gets populated when !a is invoked
                 song = Song(self.url_list[0]) #Takes care of the first one
-                self.parent.send_msg_current_channel('Adding ' + '<b>' + song.title
+                self.parent.send_msg_current_channel('Adding ' + '<b>' + self.new_songs[0].title
                                                 + '</b>' + ' to the queue.')
                 if not os.path.exists(song.dl_folder + song.short_url):
                     song.download()
@@ -87,7 +87,7 @@ class Song:
             except OSError:
                 print('Could not create dl_folder, exiting!')
         command = ['youtube-dl', 'https://www.youtube.com/watch?v=' + self.short_url,
-                   '-f', '140', '-o', self.dl_folder + self.short_url]
+                   '-f', '140', '-o', self.dl_folder + self.title]
         try:
             sp.call(command)
         except OSError:
@@ -98,7 +98,7 @@ class Song:
         """ Converts and splits the song into the suitable format to stream to
         mumble server (mono PCM 16 bit little-endian), using ffmpeg
         """
-        command = ["ffmpeg", '-i', self.dl_folder + self.short_url, '-f',
+        command = ["ffmpeg", '-i', self.dl_folder + self.title, '-f',
                    's16le', '-acodec', 'pcm_s16le', '-ac', '1', '-ar',
                    '48000', '-']
         self.pipe = sp.Popen(command, stdout=sp.PIPE)
