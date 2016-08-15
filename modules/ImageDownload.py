@@ -1,17 +1,20 @@
-def call(bot, input_text):
-    print("Calling with {0}".format(input_text))
+import urllib
+import uuid
+import nltk
+
+from urllib import urlopen
+IMAGE_CACHE=".image_cache"
+
+def call(bot, command_used, arguments):
+    raw = nltk.clean_html(arguments) 
+    print("Calling with {0}".format(raw))
+    unique_filename = uuid.uuid4()
+    try:
+        urllib.urlretrieve(arguments, unique_filename)
+    except Exception as e:
+        print(e)
 
 def register(bot):
     print("Registering bot")
 
 register.commands = ["i", "images"]
-
-# def commands(bot):
-# class ImageDowloader(object):
-    # def __init__(self):
-        # commands = ["i", "images"]
-        # pass
-
-    # def setup(self, bot):
-        # print("Seeting up imagedownload")
-

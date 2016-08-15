@@ -14,7 +14,6 @@ import threading
 sys.path.append(os.path.join(os.path.dirname(__file__), "pymumble"))
 import pymumble
 
-
 def get_arg_value(arg, args_list, default=None):
     """Retrieves the values associated to command line arguments
     Possible arguments:
@@ -72,21 +71,25 @@ class MumbleJukeBox:
 
         self.registered_commands = {}
 
+        self.bot.start() # Start the mumble thread
+        self.subthread = SubThread()
+        self.subthread.daemon = True
+        self.subthread.start()
+
         self.setup()
         self.loop() # Loops the main thread
 
     def setup(self):
+        print()
+        print("Loading bot modules")
+        self.registered_commands = {}
         self.volume = 1.00
         self.paused = False
         self.skipFlag = False
         self.current_song_sample = 0
-        self.bot.start() # Start the mumble thread
         self.bot.is_ready() # Wait for the connection
         self.bot.set_bandwidth(200000)
         self.bot.users.myself.unmute() # Be sure the bot is not muted
-        self.subthread = SubThread()
-        self.subthread.daemon = True
-        self.subthread.start()
 
         home = os.path.dirname(__file__)
         filenames = []
@@ -103,17 +106,17 @@ class MumbleJukeBox:
             modules.append(module)
         for module in modules:
             print("Loaded module '{0}'".format(module.__name__))
-        if hasattr(module, 'register'): 
-            module.register(self)
-            for command in module.register.commands:
-                if command in self.registered_commands.keys():
-                    print("Command '{0}' already registered by another module".format(command), file=sys.stderr)
-                    sys.exit(1)
-                else:
-                    print("  Registering '{0}' - for module '{1}'".format(command, module.__name__))
-                    self.registered_commands[command] = module.call
-        else:
-            print("Could not register '{0}', for it is missing the 'register' function".format(module), file=sys.stderr)
+            if hasattr(module, 'register'): 
+                module.register(self)
+                for command in module.register.commands:
+                    if command in self.registered_commands.keys():
+                        print("Command '{0}' already registered by another module".format(command), file=sys.stderr)
+                        sys.exit(1)
+                    else:
+                        print("  Registering '{0}' - for module '{1}'".format(command, module.__name__))
+                        self.registered_commands[command] = module.call
+            else:
+                print("Could not register '{0}', for it is missing the 'register' function".format(module), file=sys.stderr)
 
     def get_current_channel(self):
         """Get the bot's current channel (a dict)"""
@@ -186,7 +189,9 @@ class MumbleJukeBox:
                 self.send_msg_current_channel('Current volume: ' + '<b>'
                                               + str(self.volume) + '</b>')
             if command in self.registered_commands.keys():
-                self.registered_commands[command](self, message)
+                command_used = message[0]
+                arguments = message[1:]
+                self.registered_commands[command](self, str(command_used), str(arguments))
 
 
     def printable_queue(self):
