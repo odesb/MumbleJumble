@@ -15,9 +15,10 @@ sys.path.append(os.path.join(os.path.dirname(__file__), "pymumble"))
 import pymumble
 
 class MumbleModule(object):
-    def __init__(self, call, background):
+    def __init__(self, call, background, call_in_loop):
         self.call = call
         self.background = background
+        self.call_in_loop = call_in_loop
 
 def get_arg_value(arg, args_list, default=None):
     """Retrieves the values associated to command line arguments
@@ -71,6 +72,7 @@ class MumbleJumble:
         print()
         print("Loading bot modules")
         self.registered_commands = {}
+        self.unique_modules = []
         self.volume = 1.00
         self.paused = False
         self.skipFlag = False
@@ -95,12 +97,22 @@ class MumbleJumble:
         for module in modules:
             try:
                 if hasattr(module, 'register'): 
-                    module.register(self)
+                    if hasattr(module.register, 'enabled') and not module.register.enabled:
+                        continue
+                    #TODO tidy this up
                     module_run_background = False
+                    call_in_loop = False
                     if hasattr(module.register, 'background'):
                         module_run_background = module.register.background
+                    if hasattr(module.register, 'call_in_loop'):
+                        call_in_loop = module.register.call_in_loop
                     print("Loading module '{0}' {1}".format(module.__name__, ("(background)" if module_run_background else "")))
-                    module_object = MumbleModule(module.call, module_run_background)
+                    module.register(self)
+                    
+                    module_object = MumbleModule(module.call, module_run_background, call_in_loop)
+                    self.unique_modules.append(module_object)
+                    if call_in_loop:
+                        module_object.loop = module.loop
 
                     for command in module.register.commands:
                         if command in self.registered_commands.keys():
@@ -146,6 +158,20 @@ class MumbleJumble:
         message = text.message.split(' ', 1)
         if message[0].startswith('!'):
             command = message[0][1:]
+            arguments = "".join(message[1]).strip(" ") if len(message) > 1 else ""
+
+            # Module loaded commands
+            if command in self.registered_commands.keys():
+                try:
+                    module_object = self.registered_commands[command] 
+                    if module_object.background:
+                        print("Calling in background thread")
+                        thread.start_new_thread(lambda: module_object.call(self, str(command), str(arguments)), ())
+                    else:
+                        module_object.call(self, str(command), str(arguments))
+                except Exception as e:
+                    print("Error handling command '{0}':".format(command))
+                    traceback.print_exc()
             if len(message) == 1:
 
                 if command == 'v' or command == 'vol' or command == 'volume':
@@ -167,7 +193,6 @@ class MumbleJumble:
                     self.skipFlag = True
 
             else:
-                arguments = "".join(message[1]).strip(" ")
                 if command == 'v' or command == 'vol' or command == 'volume':
                     try:
                         self.volume = float(arguments)
@@ -177,17 +202,6 @@ class MumbleJumble:
                     except ValueError:
                         self.send_msg_current_channel('Not a valid value!')
 
-                elif command in self.registered_commands.keys():
-                    try:
-                        module_object = self.registered_commands[command] 
-                        if module_object.background:
-                            print("Calling in background thread")
-                            thread.start_new_thread(lambda: module_object.call(self, str(command), str(arguments)), ())
-                        else:
-                            module_object.call(self, str(command), str(arguments))
-                    except Exception as e:
-                        print("Error handling command '{0}':".format(command))
-                        traceback.print_exc()
 
 
     def current_song_status(self):
@@ -259,6 +273,9 @@ class MumbleJumble:
                     time.sleep(1) # To allow time between songs
             else:
                 time.sleep(0.5)
+            for module in self.unique_modules:
+                if module.call_in_loop:
+                    module.loop(self)
 
 
 if __name__ == '__main__':

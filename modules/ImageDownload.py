@@ -43,8 +43,6 @@ def call(bot, command_used, arguments):
     sha_1 = hashlib.sha1()
     sha_1.update(text)
 
-    print(command_used, arguments)
-
     # reuse file names
     unique_filename = str(sha_1.hexdigest())
     try:
@@ -113,4 +111,5 @@ def register(bot):
 
 register.commands = ["i", "images"]
 register.background = True
+# register.call_in_loop = True
 
