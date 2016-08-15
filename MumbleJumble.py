@@ -174,11 +174,7 @@ class MumbleJumble:
                     traceback.print_exc()
             if len(message) == 1:
 
-                if command == 'v' or command == 'vol' or command == 'volume':
-                    self.send_msg_current_channel('Current volume: ' + '<b>'
-                                              + str(self.volume) + '</b>')
-
-                elif command == 'c' or command == 'clear':
+                if command == 'c' or command == 'clear':
                     self.skipFlag = True
                     self.threads['yt_thread'].new_songs = deque([])
                     self.audio_queue = deque([])
@@ -191,8 +187,21 @@ class MumbleJumble:
 
                 elif command == 's' or command == 'skip':
                     self.skipFlag = True
+                
+                elif command == 'v' or command == 'vol' or command == 'volume':
+                    self.send_msg_current_channel('Current volume: ' + '<b>'
+                                              + str(self.volume) + '</b>')
 
             else:
+                if command == 's' or command == 'skip':
+                    if int(arguments) > 1:
+                        try:
+                            self.audio_queue.remove(self.audio_queue[int(arguments) - 1]
+                        except IndexError:
+                            self.send_msg_current_channel('Invalid index!')
+                    else:
+                        self.skipFlag = True
+
                 if command == 'v' or command == 'vol' or command == 'volume':
                     try:
                         self.volume = float(arguments)
