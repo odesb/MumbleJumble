@@ -9,6 +9,7 @@ import subprocess as sp
 import audioop
 import time
 import threading
+import traceback
 
 # Add pymumble folder to python PATH for importing
 sys.path.append(os.path.join(os.path.dirname(__file__), "pymumble"))
@@ -191,7 +192,11 @@ class MumbleJukeBox:
             if command in self.registered_commands.keys():
                 command_used = message[0]
                 arguments = message[1:]
-                self.registered_commands[command](self, str(command_used), str(arguments))
+                try:
+                    self.registered_commands[command](self, str(command_used), str(arguments))
+                except Exception as e:
+                    print("Error handling command '{0}':".format(command))
+                    traceback.print_exc()
 
 
     def printable_queue(self):
