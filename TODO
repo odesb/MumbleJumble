@@ -1,0 +1,7 @@
+- Pipe ffmpeg into splitting its created file
+- Store audio files by their title
+- Make a better queue system to dislay song names + % done
+- Make add command display audio title
+- Add either some caching support or dl_folder user set size limit
+- Quiet mode
+- Support for all youtube-dl support websites
