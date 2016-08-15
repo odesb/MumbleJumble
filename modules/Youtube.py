@@ -18,6 +18,7 @@ register.commands = ['a', 'add']
 
 def call(bot, command_used, arguments):
     short_url = get_short_url(arguments)
+    bot.send_msg_current_channel("Trying to download song from link '{0}'".format(short_url))
     if short_url == -1:
         bot.send_msg_current_channel('Could not retrieve URL')
         return
