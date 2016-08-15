@@ -6,14 +6,17 @@ import subprocess as sp
 import pafy
 
 
-def call(bot, command_used, arguments):
 
-    yt_thread = YTThread(bot)
-    bot.threads.append(yt_thread)
-    t_index = bot.threads.index(yt_thread)
-    bot.threads[t_index].daemon = True
-    bot.threads[t_index].start()
-    
+def register(bot):
+    bot.threads['yt_thread'] = YTThread(bot)
+    bot.threads['yt_thread'].daemon = True
+    bot.threads['yt_thread'].start()
+
+
+register.commands=['a', 'add']
+
+
+def call(bot, command_used, arguments):
     if arguments:
         if command_used == 'a' or command_used == 'add':
             try:
@@ -22,7 +25,7 @@ def call(bot, command_used, arguments):
                 bot.send_msg_current_channel('Could not retrieve URL')
                 return
             # Subthread will process its newly populated url_list
-            bot.threads[t_index].url_list.append(short_url)
+            bot.threads['yt_thread'].url_list.append(short_url)
 
 
 def get_short_url(message):
@@ -48,6 +51,7 @@ class YTThread(threading.Thread):
         threading.Thread.__init__(self)
         self.url_list = deque([]) #Queue of URL to process
         self.parent = parent
+        self.index = None
 
 
     def run(self):
@@ -106,8 +110,3 @@ class Song:
                 return
             counter += 1
 
-def register(bot):
-    print('Registering bot')
-
-
-register.commands=['a', 'add']

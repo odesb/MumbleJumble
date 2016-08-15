@@ -13,6 +13,7 @@ import traceback
 sys.path.append(os.path.join(os.path.dirname(__file__), "pymumble"))
 import pymumble
 
+
 def get_arg_value(arg, args_list, default=None):
     """Retrieves the values associated to command line arguments
     Possible arguments:
@@ -53,8 +54,7 @@ class MumbleJukeBox:
         # Sets to bot to call command_received when a user sends text
         self.bot.callbacks.set_callback('text_received', self.command_received)
 
-        self.registered_commands = {}
-        self.threads = [] # List of threads running, excluding the main thread
+        self.threads = {} # List of threads running, excluding the main thread
         self.audio_queue = deque([])
 
         self.bot.start() # Start the mumble thread
@@ -100,6 +100,7 @@ class MumbleJukeBox:
                         self.registered_commands[command] = module.call
             else:
                 print("Could not register '{0}', for it is missing the 'register' function".format(module), file=sys.stderr)
+
 
     def get_current_channel(self):
         """Get the bot's current channel (a dict)"""
