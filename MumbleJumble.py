@@ -273,6 +273,8 @@ class MumbleJumble:
                     time.sleep(1) # To allow time between songs
             else:
                 time.sleep(0.5)
+
+            #TODO: This doesn't work properly if a song is playing, of course
             for module in self.unique_modules:
                 if module.call_in_loop:
                     module.loop(self)
