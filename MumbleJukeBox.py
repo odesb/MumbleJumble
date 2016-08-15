@@ -5,15 +5,14 @@ from collections import deque
 import os
 import imp
 import sys
-import subprocess as sp
 import audioop
 import time
-import threading
 import traceback
 
 # Add pymumble folder to python PATH for importing
 sys.path.append(os.path.join(os.path.dirname(__file__), "pymumble"))
 import pymumble
+
 
 def get_arg_value(arg, args_list, default=None):
     """Retrieves the values associated to command line arguments
@@ -25,7 +24,6 @@ def get_arg_value(arg, args_list, default=None):
     --certfile  Mumble certification
     --reconnect Bot reconnects to the server if disconnected
     --debug     Debug=True will generate a lot of stdout messages
-    --dl_folder User set location of the downloaded songs
     """
     if arg in args_list:
         return args_list[args_list.index(arg) + 1]
@@ -35,21 +33,7 @@ def get_arg_value(arg, args_list, default=None):
         return default
     else:
         sys.exit('Parameter ' + arg + ' is missing!')
-
-
-def get_dl_folder():
-    """Gets the path of the user set or default download folder"""
-    return get_arg_value('--dl_folder', sys.argv[1:], default='./.song_library/')
-
-
-def get_short_url(message):
-    """Gives a shorter version of URL, useful to store files"""
-    patterns = ['watch?v=', 'youtu.be/']
-    for i in patterns:
-        if i in message:
-            start = message.find(i) + len(i)
-            return message[start:start + 11]
-
+        
 
 class MumbleJukeBox:
     """Represents the Mumble client interacting with users and outputting sound
@@ -70,12 +54,10 @@ class MumbleJukeBox:
         # Sets to bot to call command_received when a user sends text
         self.bot.callbacks.set_callback('text_received', self.command_received)
 
-        self.registered_commands = {}
+        self.threads = {} # Dict of threads running, excluding the main thread
+        self.audio_queue = deque([]) # Queue of audio ready to be sent
 
         self.bot.start() # Start the mumble thread
-        self.subthread = SubThread()
-        self.subthread.daemon = True
-        self.subthread.start()
 
         self.setup()
         self.loop() # Loops the main thread
@@ -123,6 +105,7 @@ class MumbleJukeBox:
                 print("Error registering module '{0}'".format(module.__name__))
                 traceback.print_exc()
 
+
     def get_current_channel(self):
         """Get the bot's current channel (a dict)"""
         try:
@@ -154,54 +137,51 @@ class MumbleJukeBox:
         if message[0] == '!':
             message = message[1:].split(' ', 1)
             command = message[0]
-            if len(message) > 1:
-                parameter = message[1]
-                if command == 'a' or command == 'add':
-                    try:
-                        short_url = get_short_url(parameter)
-                    except:
-                        self.send_msg_current_channel('Could not retrieve URL')
-                        return
-                    self.send_msg_current_channel('Adding ' + '<b>' + short_url
-                                                  + '</b>' + ' to queue.')
-                    # Subthread will process its newly populated url_list
-                    self.subthread.url_list.append(short_url)
+            if len(message) == 1:
 
-                elif command == 'v' or command == 'vol' or command == 'volume':
+                if command == 'v' or command == 'vol' or command == 'volume':
+                    self.send_msg_current_channel('Current volume: ' + '<b>'
+                                              + str(self.volume) + '</b>')
+
+                elif command == 'c' or command == 'clear':
+                    self.skipFlag = True
+                    self.subthread.url_list = deque([])
+                    self.subthread.song_queue = deque([])
+
+                elif command == 'p' or command == 'pause':
+                    self.toggle_pause()
+
+                elif command == 'q' or command == 'queue':
+                    self.send_msg_current_channel(self.printable_queue())
+
+                elif command == 's' or command == 'skip':
+                    self.skipFlag = True
+
+            else:
+                arguments = message[1]
+                if command == 'v' or command == 'vol' or command == 'volume':
                     try:
-                        self.volume = float(parameter)
+                        self.volume = float(arguments)
                         self.send_msg_current_channel('Changing volume to '
-                                                  + '<b>' + str(self.volume)
-                                                  + '</b>')
+                                                          + '<b>' + str(self.volume)
+                                                          + '</b>')
                     except ValueError:
                         self.send_msg_current_channel('Not a valid value!')
 
-            elif command == 'c' or command == 'clear':
-                self.skipFlag = True
-                self.subthread.url_list = deque([])
-                self.subthread.song_queue = deque([])
+                elif command in self.registered_commands.keys():
+                    try:
+                        self.registered_commands[command](self, str(command), str(arguments))
+                    except Exception as e:
+                        print("Error handling command '{0}':".format(command))
+                        traceback.print_exc()
 
-            elif command == 'p' or command == 'pause':
-                self.toggle_pause()
 
-            elif command == 'q' or command == 'queue':
-                self.send_msg_current_channel(self.printable_queue())
-
-            elif command == 's' or command == 'skip':
-                self.skipFlag = True
-
-            elif command == 'v' or command == 'vol' or command == 'volume':
-                self.send_msg_current_channel('Current volume: ' + '<b>'
-                                              + str(self.volume) + '</b>')
-            if command in self.registered_commands.keys():
-                command_used = message[0] 
-                message.pop(0)
-                arguments = " ".join(message)
-                try:
-                    self.registered_commands[command](self, str(command_used), arguments)
-                except Exception as e:
-                    print("Error handling command '{0}':".format(command))
-                    traceback.print_exc()
+    def current_song_status(self):
+        """Returns the completion of the song in %. Associated with the queue
+        command.
+        """
+        return float(self.current_song_sample) / float(
+                self.audio_queue[0].samples['total_samples']) * 100
 
 
     def printable_queue(self):
@@ -210,23 +190,21 @@ class MumbleJukeBox:
         subthread. Possible states: Paused, Playing, Ready, Downloading.
         """
         queue = []
-        if len(self.subthread.song_queue) + len(self.subthread.url_list) == 0:
+        if len(self.audio_queue) + len(self.threads['yt_thread'].url_list) == 0:
             return 'Queue is empty'
         else:
-            for i in range(len(self.subthread.song_queue)):
+            for i in range(len(self.audio_queue)):
                 if i == 0:
                     if self.paused:
                         queue.append('%s <b>Paused - %i %%</b>' %
-                                (self.subthread.song_queue[i].short_url,
-                                 self.current_song_status()))
+                                (self.audio_queue[i].title, self.current_song_status()))
                     elif not self.paused:
                         queue.append('%s <b>Playing - %i %%</b>' %
-                                (self.subthread.song_queue[i].short_url,
-                                 self.current_song_status()))
+                                (self.audio_queue[i].title, self.current_song_status()))
                 else:
-                    queue.append(self.subthread.song_queue[i].short_url + ' <b>Ready</b>')
-            for j in range(len(self.subthread.url_list)):
-                queue.append(self.subthread.url_list[j] + ' <b>Downloading</b>')
+                    queue.append(self.audio_queue[i].title + ' <b>Ready</b>')
+            for j in range(len(self.threads['yt_thread'].url_list)):
+                queue.append(self.threads['yt_thread'].url_list[j] + ' <b>Downloading</b>')
             return ', '.join(queue)
 
 
@@ -237,21 +215,14 @@ class MumbleJukeBox:
         else:
             self.paused = True
 
-    def current_song_status(self):
-        """Returns the completion of the song in %. Associated with the queue
-        command.
-        """
-        return float(self.current_song_sample) / float(
-                self.subthread.song_queue[0].samples['total_samples']) * 100
-
 
     def loop(self):
         """Main loop that sends audio samples to the server. Sends the first
         song in SubThread's song queue
         """
         while True:
-            if len(self.subthread.song_queue) > 0:
-                for i in range(self.subthread.song_queue[0].samples['total_samples']):
+            if len(self.audio_queue) > 0:
+                for i in range(self.audio_queue[0].samples['total_samples']):
                     self.current_song_sample = i
                     while self.paused:
                         time.sleep(0.1)
@@ -259,7 +230,7 @@ class MumbleJukeBox:
                         time.sleep(0.01)
                     if not self.skipFlag:
                         self.bot.sound_output.add_sound(audioop.mul(
-                                        self.subthread.song_queue[0].samples[i],
+                                        self.audio_queue[0].samples[i],
                                         2, self.volume))
                     elif self.skipFlag:
                         self.skipFlag = False
@@ -267,78 +238,13 @@ class MumbleJukeBox:
                 try:
                     # Removes the first song from the queue
                     # Will fail if clear command is passed, not a problem though
-                    self.subthread.song_queue.popleft()
+                    self.audio_queue.popleft()
                 except:
                     pass
                 finally:
                     time.sleep(1) # To allow time between songs
             else:
                 time.sleep(0.5)
-
-
-class SubThread(threading.Thread):
-    """A subthread of the main thread, takes care of downloading, converting and
-    splitting audio files, while the main thread is busy outputting sound to the
-    server
-    """
-    def __init__(self):
-        threading.Thread.__init__(self)
-        self.url_list = deque([]) #Queue of URL to process
-        self.song_queue = deque([]) #Queue of split songs ready to be sent by
-                                    #the main loop to the server
-
-    def run(self):
-        while True:
-            if len(self.url_list) > 0: #List gets populated when !a is invoked
-                song = Song(self.url_list[0]) #Takes care of the first one
-                if not os.path.exists(song.dl_folder + song.short_url):
-                    song.download()
-                song.convert_split()
-                self.song_queue.append(song)
-                self.url_list.popleft() #Done with processing the first URL
-            else:
-                time.sleep(0.1)
-
-
-class Song:
-    """Represents a song processed by SubThread and streamed by MumbleJukeBox"""
-    def __init__(self, short_url):
-        self.samples = dict() # Will contain each samples and total # of samples
-        self.short_url = short_url # Youtube short URL
-        self.dl_folder = get_dl_folder()
-        self.pipe = None
-
-
-    def download(self):
-        """Downloads music using youtube-dl in the specified dl_folder"""
-        if not os.path.exists(self.dl_folder):
-            try:
-                os.mkdir(self.dl_folder)
-            except OSError:
-                sys.exit('Could not create dl_folder, exiting!')
-        command = ['youtube-dl', 'https://www.youtube.com/watch?v=' + self.short_url,
-                   '-f', '140', '-o', self.dl_folder + self.short_url]
-        try:
-            sp.call(command)
-        except OSError:
-            sys.exit('Cannot download file, exiting!')
-
-
-    def convert_split(self):
-        """ Converts and splits the song into the suitable format to stream to
-        mumble server (mono PCM 16 bit little-endian), using ffmpeg
-        """
-        command = ["ffmpeg", '-i', self.dl_folder + self.short_url, '-f',
-                   's16le', '-acodec', 'pcm_s16le', '-ac', '1', '-ar',
-                   '48000', '-']
-        self.pipe = sp.Popen(command, stdout=sp.PIPE)
-        counter = 0
-        while True:
-            self.samples[counter] = self.pipe.stdout.read(88200)
-            if len(self.samples[counter]) == 0:
-                self.samples['total_samples'] = counter
-                return
-            counter += 1
 
 
 if __name__ == '__main__':

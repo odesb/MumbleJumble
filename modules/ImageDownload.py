@@ -1,4 +1,3 @@
-import uuid
 import requests
 import os
 import base64
@@ -8,7 +7,6 @@ import traceback
 import glob
 from PIL import Image
 from bs4 import BeautifulSoup
-from urllib import urlopen
 
 IMAGE_CACHE=".image_cache"
 MAX_IMAGE_SIZE = 64000
@@ -110,6 +108,5 @@ def call(bot, command_used, arguments):
 def register(bot):
     if not os.path.exists(IMAGE_CACHE):
         os.mkdir(IMAGE_CACHE)
-    print("Registering bot")
 
 register.commands = ["i", "images"]
