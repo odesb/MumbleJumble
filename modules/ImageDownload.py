@@ -110,3 +110,5 @@ def register(bot):
         os.mkdir(IMAGE_CACHE)
 
 register.commands = ["i", "images"]
+register.background = True
+
