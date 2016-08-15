@@ -137,17 +137,15 @@ class MumbleJumble:
         Takes text, a class from pymumble.mumble_pb2
         The main loop pickups the change of states and the non-empty song queue
         Commands have to start with a !:
-        a, add          Adds a song from URL to the current queue
         c, clear        Clears the queue and stops current song
         p, pause        Pause the current playing song
         q, queue        Displays the current queue in the chat
         s, skip         Skips the song currently playing
         v, vol, volume  Returns the current volume or changes it
         """
-        message = text.message
-        if message[0] == '!':
-            message = message[1:].split(' ', 1)
-            command = message[0]
+        message = text.message.split()
+        if message[0].startswith('!'):
+            command = message[0][1:]
             if len(message) == 1:
 
                 if command == 'v' or command == 'vol' or command == 'volume':

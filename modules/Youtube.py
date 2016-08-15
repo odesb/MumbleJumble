@@ -13,7 +13,7 @@ def register(bot):
     bot.threads['yt_thread'].start()
 
 
-register.commands=['a', 'add']
+register.commands = ['a', 'add']
 
 
 def call(bot, command_used, arguments):
