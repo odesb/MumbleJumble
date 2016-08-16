@@ -1,7 +1,7 @@
 
 def call(bot, command_used, arguments):
     bot.send_msg_current_channel("Reloading bot config")
-    bot.setup()
+    bot.load_modules()
 
 def register(bot):
     pass

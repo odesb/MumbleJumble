@@ -68,14 +68,6 @@ class MumbleJumble:
 
         self.bot.start() # Start the mumble thread
 
-        self.setup()
-        self.loop() # Loops the main thread
-
-    def setup(self):
-        print()
-        print("Loading bot modules")
-        self.registered_commands = {}
-        self.unique_modules = []
         self.volume = 1.00
         self.paused = False
         self.skipFlag = False
@@ -83,6 +75,15 @@ class MumbleJumble:
         self.bot.is_ready() # Wait for the connection
         self.bot.set_bandwidth(200000)
         self.bot.users.myself.unmute() # Be sure the bot is not muted
+
+        self.load_modules()
+        self.loop() # Loops the main thread
+
+    def load_modules(self):
+        print()
+        print("Loading bot modules")
+        self.registered_commands = {}
+        self.unique_modules = []
 
         home = os.path.dirname(__file__)
         filenames = []
@@ -258,7 +259,6 @@ class MumbleJumble:
             self.paused = True
 
     def _loop_modules(self):
-        #TODO: This doesn't work properly if a song is playing, of course
         for module in self.unique_modules:
             if module.call_in_loop:
                 module.loop(self)
@@ -267,7 +267,6 @@ class MumbleJumble:
         self._total_delta += delta
         if self._total_delta > DELTA_LOOP:
             self._total_delta = 0
-            print("Self time to loop modules")
             thread.start_new_thread(self._loop_modules, ())
         time.sleep(delta)
 
