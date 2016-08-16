@@ -18,10 +18,9 @@ import pymumble
 DELTA_LOOP = 0.5
 
 class MumbleModule(object):
-    def __init__(self, call, background, call_in_loop):
+    def __init__(self, call, background):
         self.call = call
         self.background = background
-        self.call_in_loop = call_in_loop
 
 def get_arg_value(arg, args_list, default=None):
     """Retrieves the values associated to command line arguments
@@ -96,7 +95,7 @@ class MumbleJumble:
             name = os.path.basename(filename)[:-3]
             try: module = imp.load_source(name, filename)
             except Exception as e:
-                print(e)
+                traceback.print_exc()
             modules.append(module)
         for module in modules:
             try:
@@ -105,23 +104,21 @@ class MumbleJumble:
                         continue
                     #TODO tidy this up
                     module_run_background = False
-                    call_in_loop = False
                     if hasattr(module.register, 'background'):
                         module_run_background = module.register.background
-                    if hasattr(module.register, 'call_in_loop'):
-                        call_in_loop = module.register.call_in_loop
+
                     print("Loading module '{0}' {1}".format(module.__name__, ("(background)" if module_run_background else "")))
                     module.register(self)
                     
-                    module_object = MumbleModule(module.call, module_run_background, call_in_loop)
-                    self.unique_modules.append(module_object)
-                    if call_in_loop:
+                    module_object = MumbleModule(module.call, module_run_background)
+                    if hasattr(module, 'loop'):
                         module_object.loop = module.loop
+
+                    self.unique_modules.append(module_object)
 
                     for command in module.register.commands:
                         if command in self.registered_commands.keys():
                             print("Command '{0}' already registered by another module".format(command), file=sys.stderr)
-                            sys.exit(1)
                         else:
                             print("  Registering '{0}' - for module '{1}'".format(command, module.__name__))
                             self.registered_commands[command] = module_object
@@ -131,6 +128,7 @@ class MumbleJumble:
             except Exception as e:
                 print("Error registering module '{0}'".format(module.__name__))
                 traceback.print_exc()
+        return len(modules)
 
 
     def get_current_channel(self):
@@ -147,6 +145,10 @@ class MumbleJumble:
         channel = self.get_current_channel()
         channel.send_text_message(msg)
 
+    def clear_queue(self):
+        self.skipFlag = True
+        self.threads['yt_thread'].new_songs = deque([])
+        self.audio_queue = deque([])
 
     def command_received(self, text):
         """Main function that reads commands in chat and outputs accordingly
@@ -179,9 +181,7 @@ class MumbleJumble:
             if len(message) == 1:
 
                 if command == 'c' or command == 'clear':
-                    self.skipFlag = True
-                    self.threads['yt_thread'].new_songs = deque([])
-                    self.audio_queue = deque([])
+                    self.clear_queue()
 
                 elif command == 'p' or command == 'pause':
                     self.toggle_pause()
@@ -260,7 +260,7 @@ class MumbleJumble:
 
     def _loop_modules(self):
         for module in self.unique_modules:
-            if module.call_in_loop:
+            if hasattr(module, "loop"):
                 module.loop(self)
 
     def _sleep_delta(self, delta):

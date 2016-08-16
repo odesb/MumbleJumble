@@ -1,7 +1,7 @@
 
 def call(bot, command_used, arguments):
-    bot.send_msg_current_channel("Reloading bot config")
-    bot.load_modules()
+    loaded_count = bot.load_modules()
+    bot.send_msg_current_channel("Reloaded '{0}' bot modules".format(loaded_count))
 
 def register(bot):
     pass
