@@ -9,10 +9,13 @@ import audioop
 import time
 import traceback
 import thread
+import time
 
 # Add pymumble folder to python PATH for importing
 sys.path.append(os.path.join(os.path.dirname(__file__), "pymumble"))
 import pymumble
+
+DELTA_LOOP = 0.5
 
 class MumbleModule(object):
     def __init__(self, call, background, call_in_loop):
@@ -243,19 +246,33 @@ class MumbleJumble:
         else:
             self.paused = True
 
+    def _loop_modules(self):
+        #TODO: This doesn't work properly if a song is playing, of course
+        for module in self.unique_modules:
+            if module.call_in_loop:
+                module.loop(self)
+
+    def _sleep_delta(self, delta):
+        self._total_delta += delta
+        if self._total_delta > DELTA_LOOP:
+            self._total_delta = 0
+            print("Self time to loop modules")
+            thread.start_new_thread(self._loop_modules, ())
+        time.sleep(delta)
 
     def loop(self):
         """Main loop that sends audio samples to the server. Sends the first
         song in SubThread's song queue
         """
+        self._total_delta = 0
         while True:
             if len(self.audio_queue) > 0:
                 for i in range(self.audio_queue[0].samples['total_samples']):
                     self.current_song_sample = i
                     while self.paused:
-                        time.sleep(0.1)
-                    while self.bot.sound_output.get_buffer_size() > 0.5:
-                        time.sleep(0.01)
+                        self._sleep_delta(0.1)
+                    while self.bot.sound_output.get_buffer_size() > DELTA_LOOP:
+                        self._sleep_delta(0.01)
                     if not self.skipFlag:
                         self.bot.sound_output.add_sound(audioop.mul(
                                         self.audio_queue[0].samples[i],
@@ -270,14 +287,10 @@ class MumbleJumble:
                 except:
                     pass
                 finally:
-                    time.sleep(1) # To allow time between songs
+                    self._sleep_delta(1) # To allow time between songs
             else:
-                time.sleep(0.5)
+                self._sleep_delta(DELTA_LOOP)
 
-            #TODO: This doesn't work properly if a song is playing, of course
-            for module in self.unique_modules:
-                if module.call_in_loop:
-                    module.loop(self)
 
 
 if __name__ == '__main__':
