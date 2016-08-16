@@ -1,5 +1,5 @@
-import ImageDownload
-import Youtube
+import modules.ImageDownload
+import modules.Youtube
 
 # This is a great way to lose all your friends
 def call(bot, command_used, arguments):
