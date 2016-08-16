@@ -155,7 +155,7 @@ class MumbleJumble:
         s, skip         Skips the song currently playing
         v, vol, volume  Returns the current volume or changes it
         """
-        message = text.message.split(' ', 1)
+        message = text.message.lstrip().split(' ', 1)
         if message[0].startswith('!'):
             command = message[0][1:]
             arguments = "".join(message[1]).strip(" ") if len(message) > 1 else ""
