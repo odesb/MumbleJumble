@@ -158,7 +158,7 @@ class MumbleJumble:
         s, skip         Skips the song currently playing
         v, vol, volume  Returns the current volume or changes it
         """
-        message = text.message.split(' ', 1)
+        message = text.message.lstrip().split(' ', 1)
         if message[0].startswith('!'):
             command = message[0][1:]
             arguments = "".join(message[1]).strip(" ") if len(message) > 1 else ""
@@ -177,11 +177,7 @@ class MumbleJumble:
                     traceback.print_exc()
             if len(message) == 1:
 
-                if command == 'v' or command == 'vol' or command == 'volume':
-                    self.send_msg_current_channel('Current volume: ' + '<b>'
-                                              + str(self.volume) + '</b>')
-
-                elif command == 'c' or command == 'clear':
+                if command == 'c' or command == 'clear':
                     self.skipFlag = True
                     self.threads['yt_thread'].new_songs = deque([])
                     self.audio_queue = deque([])
@@ -194,8 +190,23 @@ class MumbleJumble:
 
                 elif command == 's' or command == 'skip':
                     self.skipFlag = True
+                
+                elif command == 'v' or command == 'vol' or command == 'volume':
+                    self.send_msg_current_channel('Current volume: ' + '<b>'
+                                              + str(self.volume) + '</b>')
 
             else:
+                if command == 's' or command == 'skip':
+                    if select > 1:
+                        try:
+                            select = int(arguments)
+                            self.audio_queue.remove(self.audio_queue[select - 1])
+                        except:
+                            self.send_msg_current_channel('Not a valid value!')
+                            return
+                    else:
+                        self.skipFlag = True
+
                 if command == 'v' or command == 'vol' or command == 'volume':
                     try:
                         self.volume = float(arguments)
