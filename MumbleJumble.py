@@ -41,7 +41,7 @@ def get_arg_value(arg, args_list, default=None):
         return default
     else:
         sys.exit('Parameter ' + arg + ' is missing!')
-        
+
 
 class MumbleJumble:
     """Represents the Mumble client interacting with users and outputting sound
@@ -86,12 +86,12 @@ class MumbleJumble:
 
         home = os.path.dirname(__file__)
         filenames = []
-        for fn in os.listdir(os.path.join(home, 'modules')): 
-            if fn.endswith('.py') and not fn.startswith('_'): 
+        for fn in os.listdir(os.path.join(home, 'modules')):
+            if fn.endswith('.py') and not fn.startswith('_'):
                 filenames.append(os.path.join(home, 'modules', fn))
 
         modules = []
-        for filename in filenames: 
+        for filename in filenames:
             name = os.path.basename(filename)[:-3]
             try: module = imp.load_source(name, filename)
             except Exception as e:
@@ -99,7 +99,7 @@ class MumbleJumble:
             modules.append(module)
         for module in modules:
             try:
-                if hasattr(module, 'register'): 
+                if hasattr(module, 'register'):
                     if hasattr(module.register, 'enabled') and not module.register.enabled:
                         continue
                     #TODO tidy this up
@@ -109,7 +109,7 @@ class MumbleJumble:
 
                     print("Loading module '{0}' {1}".format(module.__name__, ("(background)" if module_run_background else "")))
                     module.register(self)
-                    
+
                     module_object = MumbleModule(module.call, module_run_background)
                     if hasattr(module, 'loop'):
                         module_object.loop = module.loop
@@ -169,7 +169,7 @@ class MumbleJumble:
             # Module loaded commands
             if command in self.registered_commands.keys():
                 try:
-                    module_object = self.registered_commands[command] 
+                    module_object = self.registered_commands[command]
                     if module_object.background:
                         print("Calling in background thread")
                         thread.start_new_thread(lambda: module_object.call(self, str(command), str(arguments)), ())
@@ -191,7 +191,7 @@ class MumbleJumble:
 
                 elif command == 's' or command == 'skip':
                     self.skipFlag = True
-                
+
                 elif command == 'v' or command == 'vol' or command == 'volume':
                     self.send_msg_current_channel('Current volume: ' + '<b>'
                                               + str(self.volume) + '</b>')
