@@ -1,12 +1,13 @@
 import random 
 # Since sleep is 0.5, this 2 interval = 1s
-RANDOM_SPEECH_INTERVAL_MIN = 500
+RANDOM_SPEECH_INTERVAL_MIN = 50
 RANDOM_SPEECH_INTERVAL_MAX = 2000
 SPEECH = ["I hate everyone", \
 "Stop living", \
 "Can we be friends", \
 "How can mirrors be real", \
 "Why are you listening to a bot", \
+"That was really disgusting of you", \
 ]
 
 def call(bot, command_used, arguments):
@@ -27,5 +28,4 @@ def loop(bot):
 register.TOTAL_LOOPS = 0
 register.NEXT_SPEECH = random.randrange(RANDOM_SPEECH_INTERVAL_MIN, RANDOM_SPEECH_INTERVAL_MAX)
 register.commands = [""]
-register.call_in_loop = True
 register.enabled = True

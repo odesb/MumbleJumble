@@ -9,16 +9,18 @@ import audioop
 import time
 import traceback
 import thread
+import time
 
 # Add pymumble folder to python PATH for importing
 sys.path.append(os.path.join(os.path.dirname(__file__), "pymumble"))
 import pymumble
 
+DELTA_LOOP = 0.5
+
 class MumbleModule(object):
-    def __init__(self, call, background, call_in_loop):
+    def __init__(self, call, background):
         self.call = call
         self.background = background
-        self.call_in_loop = call_in_loop
 
 def get_arg_value(arg, args_list, default=None):
     """Retrieves the values associated to command line arguments
@@ -39,7 +41,7 @@ def get_arg_value(arg, args_list, default=None):
         return default
     else:
         sys.exit('Parameter ' + arg + ' is missing!')
-        
+
 
 class MumbleJumble:
     """Represents the Mumble client interacting with users and outputting sound
@@ -65,14 +67,6 @@ class MumbleJumble:
 
         self.bot.start() # Start the mumble thread
 
-        self.setup()
-        self.loop() # Loops the main thread
-
-    def setup(self):
-        print()
-        print("Loading bot modules")
-        self.registered_commands = {}
-        self.unique_modules = []
         self.volume = 1.00
         self.paused = False
         self.skipFlag = False
@@ -81,43 +75,50 @@ class MumbleJumble:
         self.bot.set_bandwidth(200000)
         self.bot.users.myself.unmute() # Be sure the bot is not muted
 
+        self.load_modules()
+        self.loop() # Loops the main thread
+
+    def load_modules(self):
+        print()
+        print("Loading bot modules")
+        self.registered_commands = {}
+        self.unique_modules = []
+
         home = os.path.dirname(__file__)
         filenames = []
-        for fn in os.listdir(os.path.join(home, 'modules')): 
-            if fn.endswith('.py') and not fn.startswith('_'): 
+        for fn in os.listdir(os.path.join(home, 'modules')):
+            if fn.endswith('.py') and not fn.startswith('_'):
                 filenames.append(os.path.join(home, 'modules', fn))
 
         modules = []
-        for filename in filenames: 
+        for filename in filenames:
             name = os.path.basename(filename)[:-3]
             try: module = imp.load_source(name, filename)
             except Exception as e:
-                print(e)
+                traceback.print_exc()
             modules.append(module)
         for module in modules:
             try:
-                if hasattr(module, 'register'): 
+                if hasattr(module, 'register'):
                     if hasattr(module.register, 'enabled') and not module.register.enabled:
                         continue
                     #TODO tidy this up
                     module_run_background = False
-                    call_in_loop = False
                     if hasattr(module.register, 'background'):
                         module_run_background = module.register.background
-                    if hasattr(module.register, 'call_in_loop'):
-                        call_in_loop = module.register.call_in_loop
+
                     print("Loading module '{0}' {1}".format(module.__name__, ("(background)" if module_run_background else "")))
                     module.register(self)
-                    
-                    module_object = MumbleModule(module.call, module_run_background, call_in_loop)
-                    self.unique_modules.append(module_object)
-                    if call_in_loop:
+
+                    module_object = MumbleModule(module.call, module_run_background)
+                    if hasattr(module, 'loop'):
                         module_object.loop = module.loop
+
+                    self.unique_modules.append(module_object)
 
                     for command in module.register.commands:
                         if command in self.registered_commands.keys():
                             print("Command '{0}' already registered by another module".format(command), file=sys.stderr)
-                            sys.exit(1)
                         else:
                             print("  Registering '{0}' - for module '{1}'".format(command, module.__name__))
                             self.registered_commands[command] = module_object
@@ -127,6 +128,7 @@ class MumbleJumble:
             except Exception as e:
                 print("Error registering module '{0}'".format(module.__name__))
                 traceback.print_exc()
+        return len(modules)
 
 
     def get_current_channel(self):
@@ -143,6 +145,10 @@ class MumbleJumble:
         channel = self.get_current_channel()
         channel.send_text_message(msg)
 
+    def clear_queue(self):
+        self.skipFlag = True
+        self.threads['yt_thread'].new_songs = deque([])
+        self.audio_queue = deque([])
 
     def command_received(self, text):
         """Main function that reads commands in chat and outputs accordingly
@@ -155,7 +161,7 @@ class MumbleJumble:
         s, skip         Skips the song currently playing
         v, vol, volume  Returns the current volume or changes it
         """
-        message = text.message.split(' ', 1)
+        message = text.message.lstrip().split(' ', 1)
         if message[0].startswith('!'):
             command = message[0][1:]
             arguments = "".join(message[1]).strip(" ") if len(message) > 1 else ""
@@ -163,7 +169,7 @@ class MumbleJumble:
             # Module loaded commands
             if command in self.registered_commands.keys():
                 try:
-                    module_object = self.registered_commands[command] 
+                    module_object = self.registered_commands[command]
                     if module_object.background:
                         print("Calling in background thread")
                         thread.start_new_thread(lambda: module_object.call(self, str(command), str(arguments)), ())
@@ -175,9 +181,7 @@ class MumbleJumble:
             if len(message) == 1:
 
                 if command == 'c' or command == 'clear':
-                    self.skipFlag = True
-                    self.threads['yt_thread'].new_songs = deque([])
-                    self.audio_queue = deque([])
+                    self.clear_queue()
 
                 elif command == 'p' or command == 'pause':
                     self.toggle_pause()
@@ -187,7 +191,7 @@ class MumbleJumble:
 
                 elif command == 's' or command == 'skip':
                     self.skipFlag = True
-                
+
                 elif command == 'v' or command == 'vol' or command == 'volume':
                     self.send_msg_current_channel('Current volume: ' + '<b>'
                                               + str(self.volume) + '</b>')
@@ -254,19 +258,31 @@ class MumbleJumble:
         else:
             self.paused = True
 
+    def _loop_modules(self):
+        for module in self.unique_modules:
+            if hasattr(module, "loop"):
+                module.loop(self)
+
+    def _sleep_delta(self, delta):
+        self._total_delta += delta
+        if self._total_delta > DELTA_LOOP:
+            self._total_delta = 0
+            thread.start_new_thread(self._loop_modules, ())
+        time.sleep(delta)
 
     def loop(self):
         """Main loop that sends audio samples to the server. Sends the first
         song in SubThread's song queue
         """
+        self._total_delta = 0
         while True:
             if len(self.audio_queue) > 0:
                 for i in range(self.audio_queue[0].samples['total_samples']):
                     self.current_song_sample = i
                     while self.paused:
-                        time.sleep(0.1)
-                    while self.bot.sound_output.get_buffer_size() > 0.5:
-                        time.sleep(0.01)
+                        self._sleep_delta(0.1)
+                    while self.bot.sound_output.get_buffer_size() > DELTA_LOOP:
+                        self._sleep_delta(0.01)
                     if not self.skipFlag:
                         self.bot.sound_output.add_sound(audioop.mul(
                                         self.audio_queue[0].samples[i],
@@ -281,14 +297,10 @@ class MumbleJumble:
                 except:
                     pass
                 finally:
-                    time.sleep(1) # To allow time between songs
+                    self._sleep_delta(1) # To allow time between songs
             else:
-                time.sleep(0.5)
+                self._sleep_delta(DELTA_LOOP)
 
-            #TODO: This doesn't work properly if a song is playing, of course
-            for module in self.unique_modules:
-                if module.call_in_loop:
-                    module.loop(self)
 
 
 if __name__ == '__main__':
