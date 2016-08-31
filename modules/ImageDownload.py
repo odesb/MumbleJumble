@@ -109,7 +109,7 @@ def register(bot):
     if not os.path.exists(IMAGE_CACHE):
         os.mkdir(IMAGE_CACHE)
 
-register.commands = ["i", "images"]
+register.commands = ["i", "img"]
 register.background = True
 # register.call_in_loop = True
 

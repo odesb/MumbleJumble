@@ -8,23 +8,23 @@ import pafy
 
 
 def register(bot):
-    bot.threads['yt_thread'] = YTThread(bot)
-    bot.threads['yt_thread'].daemon = True
-    bot.threads['yt_thread'].start()
+    register.thread = YTThread(bot)
+    register.thread.daemon = True
+    register.thread.start()
 
 
 register.commands = ['a', 'add']
+register.enabled = True
 
 
 def call(bot, command_used, arguments):
     short_url = get_short_url(arguments)
-    bot.send_msg_current_channel("Trying to download song from link '{0}'".format(short_url))
     if short_url == -1:
         bot.send_msg_current_channel('Could not retrieve URL')
         return
     # Subthread will process its newly populated songs list
-    bot.threads['yt_thread'].new_songs.append(Song(short_url))
-
+    register.thread.new_songs.append(Song(short_url))
+    
 
 def get_short_url(message):
     """Gives a shorter version of URL, useful to store files"""
@@ -38,7 +38,7 @@ def get_short_url(message):
 
 def get_audio_title(short_url):
     url = 'https://www.youtube.com/watch?v=' + short_url
-    return pafy.new(url).title
+    return pafy.new(url).title.replace('/', '')
 
 
 class YTThread(threading.Thread):
@@ -50,33 +50,41 @@ class YTThread(threading.Thread):
         threading.Thread.__init__(self)
         self.new_songs = deque([]) #Queue of URL to process
         self.parent = parent
-        self.index = None
+        self.reload_count =  self.parent.reload_count
 
 
     def run(self):
-        while True:
+        while self.reload_count == self.parent.reload_count:
             if len(self.new_songs) > 0: #List gets populated when !a is invoked
                 song = self.new_songs[0]
-                self.parent.send_msg_current_channel('Adding ' + '<b>' 
-                                                     + song.title
-                                                     + '</b>' + ' to the queue.')
+                try:
+                    self.parent.send_msg_current_channel('Adding <b>{0}</b> to the queue'.format(song.title))
+                except UnicodeEncodeError:
+                    song.title = song.short_url
+                    self.parent.send_msg_current_channel('Adding <b>{0}</b> to the queue'.format(song.title))
                 if not os.path.exists(song.dl_folder + song.title):
-                    song.download()
-                song.convert_split()
-                self.parent.audio_queue.append(song)
-                self.new_songs.popleft() #Done with processing the first URL
+                    try:
+                        song.download()
+                        self.parent.append_audio(song.path, 'complete', song.title)
+                        self.new_songs.popleft() #Done with processing the first URL
+                    except:
+                        print('Cannot download file, aborting!')
+                        self.new_songs.popleft()
+                        break
+                else:
+                    song.path = song.dl_folder + song.title
+                    self.parent.append_audio(song.path, 'complete', song.title)
+                    self.new_songs.popleft()
             else:
-                time.sleep(0.1)
+                time.sleep(0.5)
 
 
 class Song:
-    """Represents a song processed by SubThread and streamed by MumbleJukeBox"""
+    """Represents a song processed by SubThread and streamed by MumbleJumble"""
     def __init__(self, short_url):
-        self.samples = dict() # Will contain each samples and total # of samples
         self.short_url = short_url # Youtube short URL
         self.title = get_audio_title(self.short_url)
         self.dl_folder = './.song_library/'
-        self.pipe = None
 
 
     def download(self):
@@ -85,28 +93,11 @@ class Song:
             try:
                 os.mkdir(self.dl_folder)
             except OSError:
-                print('Could not create dl_folder, exiting!')
+                print('Could not create dl_folder, aborting!')
         command = ['youtube-dl', 'https://www.youtube.com/watch?v=' + self.short_url,
                    '-f', '140', '-o', self.dl_folder + self.title]
         try:
             sp.call(command)
+            self.path = self.dl_folder + self.title
         except OSError:
-            sys.exit('Cannot download file, exiting!')
-
-
-    def convert_split(self):
-        """ Converts and splits the song into the suitable format to stream to
-        mumble server (mono PCM 16 bit little-endian), using ffmpeg
-        """
-        command = ["ffmpeg", '-i', self.dl_folder + self.title, '-f',
-                   's16le', '-acodec', 'pcm_s16le', '-ac', '1', '-ar',
-                   '48000', '-']
-        self.pipe = sp.Popen(command, stdout=sp.PIPE)
-        counter = 0
-        while True:
-            self.samples[counter] = self.pipe.stdout.read(88200)
-            if len(self.samples[counter]) == 0:
-                self.samples['total_samples'] = counter
-                return
-            counter += 1
-
+            print('Cannot download file, aborting!')

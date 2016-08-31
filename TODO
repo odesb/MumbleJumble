@@ -4,3 +4,4 @@
 - Add either some caching support or dl_folder user set size limit
 - Quiet mode
 - Support for all youtube-dl support websites
+- Configuration file

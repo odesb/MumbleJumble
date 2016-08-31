@@ -2,25 +2,20 @@
 from __future__ import print_function
 
 from collections import deque
+import subprocess as sp
 import os
 import imp
 import sys
 import audioop
 import time
 import traceback
-import thread
-import time
+import threading
+import io
 
 # Add pymumble folder to python PATH for importing
 sys.path.append(os.path.join(os.path.dirname(__file__), "pymumble"))
 import pymumble
 
-DELTA_LOOP = 0.5
-
-class MumbleModule(object):
-    def __init__(self, call, background):
-        self.call = call
-        self.background = background
 
 def get_arg_value(arg, args_list, default=None):
     """Retrieves the values associated to command line arguments
@@ -34,13 +29,23 @@ def get_arg_value(arg, args_list, default=None):
     --debug     Debug=True will generate a lot of stdout messages
     """
     if arg in args_list:
-        return args_list[args_list.index(arg) + 1]
+        try:
+            return args_list[args_list.index(arg) + 1]
+        except IndexError:
+            sys.exit('Value of parameter ' + arg + ' is missing!')
     elif default != None or arg == '--certfile':
         # Falls back to default if no parameter given
         # Parameter --certfile's default has to be None
         return default
     else:
         sys.exit('Parameter ' + arg + ' is missing!')
+
+
+class MJModule:
+    """Object of MumbleJumble's modules"""
+    def __init__(self, call, loop=None):
+        self.call = call
+        self.loop = loop
 
 
 class MumbleJumble:
@@ -55,73 +60,101 @@ class MumbleJumble:
         reconnect = get_arg_value('--reconnect', sys.argv[1:], default=False)
         debug = get_arg_value('--debug', sys.argv[1:], default=False)
 
-        self.bot = pymumble.Mumble(host=host, port=port, user=user, password=
+        self.client = pymumble.Mumble(host=host, port=port, user=user, password=
                                    password, certfile=certfile,
                                    reconnect=reconnect, debug=debug)
 
-        # Sets to bot to call command_received when a user sends text
-        self.bot.callbacks.set_callback('text_received', self.command_received)
+        # Sets to client to call command_received when a user sends text
+        self.client.callbacks.set_callback('text_received', self.command_received)
 
-        self.threads = {} # Dict of threads running, excluding the main thread
         self.audio_queue = deque([]) # Queue of audio ready to be sent
 
-        self.bot.start() # Start the mumble thread
+        self.client.start() # Start the mumble thread
 
         self.volume = 1.00
         self.paused = False
         self.skipFlag = False
-        self.current_song_sample = 0
-        self.bot.is_ready() # Wait for the connection
-        self.bot.set_bandwidth(200000)
-        self.bot.users.myself.unmute() # Be sure the bot is not muted
+        self.reload_count = 0
+        self.client.is_ready() # Wait for the connection
+        self.client.set_bandwidth(200000)
+        self.client.users.myself.unmute() # Be sure the client is not muted
+        comment = open(os.path.dirname(__file__) + '/bot_comment.txt', 'r')
+        self.client.users.myself.comment(comment.read())
 
         self.load_modules()
-        self.loop() # Loops the main thread
+
+        self.ffmpegthread = ffmpegThread(self)
+        self.ffmpegthread.daemon = True
+        self.ffmpegthread.start()
+
+        self.loopthread = LoopThread(self)
+        self.loopthread.daemon = True
+        self.loopthread.start()
+
+        self.audio_loop() # Loops the main thread
 
     def load_modules(self):
-        print()
-        print("Loading bot modules")
-        self.registered_commands = {}
-        self.unique_modules = []
+        print('\nLoading bot modules')
+        self.registered_commands = {'c' :('built-in', self.clear_queue),
+                                    'clear' :('built-in', self.clear_queue),
+                                    'p' :('built-in', self.toggle_pause),
+                                    'pause' :('built-in', self.toggle_pause),
+                                    'q' :('built-in', self.print_queue),
+                                    'queue' :('built-in', self.print_queue),
+                                    'r' :('built-in', self.reload_modules),
+                                    'reload' :('built-in', self.reload_modules),
+                                    's' :('built-in', self.skip),
+                                    'seek' :('built-in', self.seek),
+                                    'skip' :('built-in', self.skip),
+                                    'v' :('built-in', self.chg_vol),
+                                    'vol' :('built-in', self.chg_vol),
+                                    'volume' :('built-in', self.chg_vol)}
+        self.registered_modules = [] # List of module objects
 
+        # Lists modules
         home = os.path.dirname(__file__)
         filenames = []
         for fn in os.listdir(os.path.join(home, 'modules')):
             if fn.endswith('.py') and not fn.startswith('_'):
                 filenames.append(os.path.join(home, 'modules', fn))
 
+        # Tries to import modules
         modules = []
         for filename in filenames:
             name = os.path.basename(filename)[:-3]
             try: module = imp.load_source(name, filename)
             except Exception as e:
-                traceback.print_exc()
+                print('Could not load module ' + name)
+                print('  ' + str(e))
+                continue
             modules.append(module)
+
+        # Registers modules and creates modules objects
         for module in modules:
             try:
                 if hasattr(module, 'register'):
                     if hasattr(module.register, 'enabled') and not module.register.enabled:
                         continue
-                    #TODO tidy this up
-                    module_run_background = False
-                    if hasattr(module.register, 'background'):
-                        module_run_background = module.register.background
 
-                    print("Loading module '{0}' {1}".format(module.__name__, ("(background)" if module_run_background else "")))
+                    print('Loading module ', module.__name__)
                     module.register(self)
 
-                    module_object = MumbleModule(module.call, module_run_background)
                     if hasattr(module, 'loop'):
-                        module_object.loop = module.loop
+                        module_object = MJModule(module.call, module.loop)
+                    else:
+                        module_object = MJModule(module.call)
 
-                    self.unique_modules.append(module_object)
+                    self.registered_modules.append(module_object)
 
-                    for command in module.register.commands:
-                        if command in self.registered_commands.keys():
-                            print("Command '{0}' already registered by another module".format(command), file=sys.stderr)
-                        else:
-                            print("  Registering '{0}' - for module '{1}'".format(command, module.__name__))
-                            self.registered_commands[command] = module_object
+                    try:
+                        for command in module.register.commands:
+                            if command in self.registered_commands.keys():
+                                print('Command "{0}" already registered'.format(command), file=sys.stderr)
+                            else:
+                                print("  Registering '{0}' - for module '{1}'".format(command, module.__name__))
+                                self.registered_commands[command] = ('module', module_object.call)
+                    except AttributeError:
+                        print("  No commands registered for module '{0}'".format(module.__name__))
 
                 else:
                     print("Could not register '{0}', for it is missing the 'register' function".format(module), file=sys.stderr)
@@ -131,162 +164,152 @@ class MumbleJumble:
         return len(modules)
 
 
-    def get_current_channel(self):
-        """Get the bot's current channel (a dict)"""
-        try:
-            return self.bot.channels[self.bot.users.myself['channel_id']]
-        except KeyError:
-            print('Currently assuming bot is in channel 0, try moving it')
-            return self.bot.channels[0]
+    def reload_modules(self, command, arguments):
+        self.reload_count += 1
+        loaded_count = self.load_modules()
+        self.send_msg_current_channel('Reloaded <b>{0}</b> bot modules'.format(loaded_count))
 
-
-    def send_msg_current_channel(self, msg):
-        """Send a message in the bot's current channel"""
-        channel = self.get_current_channel()
-        channel.send_text_message(msg)
-
-    def clear_queue(self):
-        self.skipFlag = True
-        self.threads['yt_thread'].new_songs = deque([])
-        self.audio_queue = deque([])
 
     def command_received(self, text):
         """Main function that reads commands in chat and outputs accordingly
-        Takes text, a class from pymumble.mumble_pb2
-        The main loop pickups the change of states and the non-empty song queue
-        Commands have to start with a !:
-        c, clear        Clears the queue and stops current song
-        p, pause        Pause the current playing song
-        q, queue        Displays the current queue in the chat
-        s, skip         Skips the song currently playing
-        v, vol, volume  Returns the current volume or changes it
+        Takes text, a class from pymumble.mumble_pb2. Commands have to start with a !
         """
         message = text.message.lstrip().split(' ', 1)
         if message[0].startswith('!'):
             command = message[0][1:]
-            arguments = "".join(message[1]).strip(" ") if len(message) > 1 else ""
+            arguments = ''.join(message[1]).strip(' ') if len(message) > 1 else ''
 
             # Module loaded commands
             if command in self.registered_commands.keys():
-                try:
-                    module_object = self.registered_commands[command]
-                    if module_object.background:
-                        print("Calling in background thread")
-                        thread.start_new_thread(lambda: module_object.call(self, str(command), str(arguments)), ())
-                    else:
-                        module_object.call(self, str(command), str(arguments))
-                except Exception as e:
-                    print("Error handling command '{0}':".format(command))
+                if self.registered_commands[command][0] == 'built-in':
+                    self.registered_commands[command][1](command, arguments)
+
+                elif self.registered_commands[command][0] == 'module':
+                    self.registered_commands[command][1](self, command, arguments)
+
+                else:
+                    print('Error handling command "{0}":'.format(command))
                     traceback.print_exc()
-            if len(message) == 1:
+     
 
-                if command == 'c' or command == 'clear':
-                    self.clear_queue()
+    def append_audio(self, audio_file, audio_type, audio_title='N/A'):
+        self.ffmpegthread.audio2process.append((audio_file, audio_type, audio_title))
 
-                elif command == 'p' or command == 'pause':
-                    self.toggle_pause()
 
-                elif command == 'q' or command == 'queue':
-                    self.send_msg_current_channel(self.printable_queue())
+    def get_current_channel(self):
+        """Get the client's current channel (a dict)"""
+        try:
+            return self.client.channels[self.client.users.myself['channel_id']]
+        except KeyError:
+            print('Currently assuming bot is in channel 0, try moving it')
+            return self.client.channels[0]
 
-                elif command == 's' or command == 'skip':
-                    self.skipFlag = True
 
-                elif command == 'v' or command == 'vol' or command == 'volume':
-                    self.send_msg_current_channel('Current volume: ' + '<b>'
-                                              + str(self.volume) + '</b>')
+    def send_msg_current_channel(self, msg):
+        """Send a message in the client's current channel"""
+        channel = self.get_current_channel()
+        channel.send_text_message(msg)
 
-            else:
-                if command == 's' or command == 'skip':
-                    if select > 1:
-                        try:
-                            select = int(arguments)
-                            self.audio_queue.remove(self.audio_queue[select - 1])
-                        except:
-                            self.send_msg_current_channel('Not a valid value!')
-                            return
-                    else:
-                        self.skipFlag = True
 
-                if command == 'v' or command == 'vol' or command == 'volume':
-                    try:
-                        self.volume = float(arguments)
-                        self.send_msg_current_channel('Changing volume to '
-                                                          + '<b>' + str(self.volume)
-                                                          + '</b>')
-                    except ValueError:
-                        self.send_msg_current_channel('Not a valid value!')
+    def skip(self, command, arguments):
+        if arguments != '':
+            try:
+                select = int(arguments)
+                self.audio_queue.remove(self.audio_queue[select - 1])
+            except ValueError:
+                self.send_msg_current_channel('Not a valid value!')
+        else:
+            self.skipFlag = True
 
+
+    def chg_vol(self, command, arguments):
+        if arguments != '':
+            try:
+                self.volume = float(arguments)
+                self.send_msg_current_channel('Changing volume to <b>{0}</b>'.format(self.volume)) 
+            except ValueError:
+                self.send_msg_current_channel('Not a valid value!')
+        else:
+            self.send_msg_current_channel('Current volume: <b>{0}</b>'.format(self.volume))
+
+
+    def clear_queue(self, command, arguments):
+        self.skipFlag = True
+        self.audio_queue = deque([])
 
 
     def current_song_status(self):
         """Returns the completion of the song in %. Associated with the queue
         command.
         """
-        return float(self.current_song_sample) / float(
-                self.audio_queue[0].samples['total_samples']) * 100
+        return float(self.audio_queue[0].current_sample) / float(
+                self.audio_queue[0].total_samples) * 100
 
 
-    def printable_queue(self):
+    def print_queue(self, command, arguments):
         """Creates a printable queue suited for the Mumble chat. Associated with
         the queue command. Checks the processing and processed song lists of the
         subthread. Possible states: Paused, Playing, Ready, Downloading.
         """
-        queue = []
-        if len(self.audio_queue) + len(self.threads['yt_thread'].new_songs) == 0:
-            return 'Queue is empty'
+        if len(self.audio_queue) == 0:
+            queue = 'Queue is empty'
         else:
+            queue = ''
             for i in range(len(self.audio_queue)):
                 if i == 0:
                     if self.paused:
-                        queue.append('%s <b>Paused - %i %%</b>' %
-                                (self.audio_queue[i].title, self.current_song_status()))
+                        queue += '<br />{0}<b> - Paused - {1}/{2} ({3}%)</b>'.format(
+                                self.audio_queue[0].title, self.audio_queue[0].get_current_status()[:-3], 
+                                self.audio_queue[0].duration[:-3], int(self.current_song_status()))
                     elif not self.paused:
-                        queue.append('%s <b>Playing - %i %%</b>' %
-                                (self.audio_queue[i].title, self.current_song_status()))
+                        queue += '<br />{0}<b> - Playing - {1}/{2} ({3}%)</b>'.format(
+                                self.audio_queue[0].title, self.audio_queue[0].get_current_status()[:-3], 
+                                self.audio_queue[0].duration[:-3], int(self.current_song_status()))
                 else:
-                    queue.append(self.audio_queue[i].title + ' <b>Ready</b>')
-            for j in range(len(self.threads['yt_thread'].new_songs)):
-                queue.append(self.threads['yt_thread'].new_songs[j].title + ' <b>Downloading</b>')
-            return ', '.join(queue)
+                    queue += '<br />{0}<b> - Ready - {1}</b>'.format(self.audio_queue[i].title,
+                                                                     self.audio_queue[i].duration[:-3])
+        self.send_msg_current_channel(queue)
 
 
-    def toggle_pause(self):
+    def toggle_pause(self, command, arguments):
         """Toggle the pause command"""
         if self.paused:
             self.paused = False
         else:
             self.paused = True
 
-    def _loop_modules(self):
-        for module in self.unique_modules:
-            if hasattr(module, "loop"):
-                module.loop(self)
 
-    def _sleep_delta(self, delta):
-        self._total_delta += delta
-        if self._total_delta > DELTA_LOOP:
-            self._total_delta = 0
-            thread.start_new_thread(self._loop_modules, ())
-        time.sleep(delta)
+    def seek(self, command, arguments):
+        """Format has to be HH:MM:SS"""
+        if arguments[2]  == ':' and arguments[5] == ':' and self.audio_queue > 0:
+            try:
+                seconds = duration2sec(arguments + '.00')
+                if 0 <= seconds <= duration2sec(self.audio_queue[0].duration):
+                    sample_len = duration2sec(self.audio_queue[0].duration) / float(self.audio_queue[0].total_samples)
+                    self.audio_queue[0].current_sample = int(seconds / sample_len)
+                else:
+                    self.send_msg_current_channel('Cannot seek to specified value.')
+            except:
+                self.send_msg_current_channel('Cannot seek to specified value.')
 
-    def loop(self):
+
+
+    def audio_loop(self):
         """Main loop that sends audio samples to the server. Sends the first
         song in SubThread's song queue
         """
-        self._total_delta = 0
         while True:
             if len(self.audio_queue) > 0:
-                for i in range(self.audio_queue[0].samples['total_samples']):
-                    self.current_song_sample = i
+                while self.audio_queue[0].current_sample <= self.audio_queue[0].total_samples:
                     while self.paused:
-                        self._sleep_delta(0.1)
-                    while self.bot.sound_output.get_buffer_size() > DELTA_LOOP:
-                        self._sleep_delta(0.01)
+                        time.sleep(0.1)
+                    while self.client.sound_output.get_buffer_size() > 0.5:
+                        time.sleep(0.1)
                     if not self.skipFlag:
-                        self.bot.sound_output.add_sound(audioop.mul(
-                                        self.audio_queue[0].samples[i],
+                        self.client.sound_output.add_sound(audioop.mul(
+                                        self.audio_queue[0].samples[self.audio_queue[0].current_sample],
                                         2, self.volume))
+                        self.audio_queue[0].current_sample += 1
                     elif self.skipFlag:
                         self.skipFlag = False
                         break
@@ -297,11 +320,107 @@ class MumbleJumble:
                 except:
                     pass
                 finally:
-                    self._sleep_delta(1) # To allow time between songs
+                    time.sleep(1) # To allow time between songs
             else:
-                self._sleep_delta(DELTA_LOOP)
+                time.sleep(0.5)
 
 
+class ffmpegThread(threading.Thread):
+    """Tuple (audio_file, audio_type, audio_title)"""
+    def __init__(self, parent):
+        threading.Thread.__init__(self)
+        self.audio2process = deque([])
+        self.parent = parent
+
+
+    def run(self):
+        while True:
+            if len(self.audio2process) > 0:
+                audio = AudioHandle(self.audio2process[0][0], self.audio2process[0][1], self.audio2process[0][2])
+                try:
+                    self.process(audio)
+                    self.parent.audio_queue.append(audio)
+                    self.audio2process.popleft()
+                except:
+                    print('Cannot process audio file, aborting!')
+                    self.audio2process.popleft()
+            else:
+                time.sleep(0.5)
+
+
+    def process(self, audio):
+        """ Converts and splits the song into the suitable format to stream to
+        mumble server (mono PCM 16 bit little-endian), using ffmpeg
+        """
+        command = ['ffmpeg', '-i', audio.file, '-f', 's16le', '-acodec', 
+                   'pcm_s16le', '-ac', '1', '-ar', '48000', '-']
+        p = sp.Popen(command, stdout=sp.PIPE, stderr=sp.PIPE)
+        stdout, stderr = p.communicate()
+        print(stderr)
+        counter = 1
+        start = stderr.find('Duration: ')
+        audio.duration = stderr[start + 10:start + 21]
+        with io.BytesIO(stdout) as out:
+            while True:
+                audio.samples[counter] = out.read(88200)
+                if len(audio.samples[counter]) == 0:
+                    audio.total_samples = counter
+                    return audio
+                counter += 1
+
+
+class AudioHandle:
+    def __init__(self, audio_file, audio_type, audio_title):
+        self.file = audio_file
+        self.type = audio_type
+        self.title = audio_title
+        self.duration = None
+        self.total_samples = None
+        self.samples = {}
+        self.current_sample = 1
+
+    def get_sample_len(self):
+        """Get length of sample in seconds"""
+        return duration2sec(self.duration) / float(self.total_samples)
+
+
+    def get_current_status(self):
+        sample_len = duration2sec(self.duration) / float(self.total_samples)
+        current_sec = self.current_sample * sample_len
+        return sec2duration(current_sec)
+
+
+def duration2sec(duration):
+    seconds = float(duration[8:11])
+    seconds += float(duration[6:8])
+    seconds += float(duration[3:5]) * 60
+    seconds += float(duration[0:2]) * 3600
+    return seconds
+
+
+def sec2duration(seconds):
+    hours = str(int(seconds / 3600)).zfill(2)
+    rem = seconds % 3600
+    minutes = str(int(rem / 60)).zfill(2)
+    seconds = str(int(rem % 60)).zfill(2)
+    milli = str(float(rem % 60 / 10))[1:4]
+    return '{0}:{1}:{2}{3}'.format(hours, minutes, seconds, milli)
+
+
+class LoopThread(threading.Thread):
+    def __init__(self, parent):
+        threading.Thread.__init__(self)
+        self.parent = parent
+        self.counter = 0
+
+    def run(self):
+        while True:
+            time.sleep(1)
+            self.counter += 1 
+            for module in self.parent.registered_modules:
+                if hasattr(module, 'loop') and hasattr(module.loop, 'time'):
+                    if self.counter % module.loop.time == 0:
+                        module.loop(self.parent)
 
 if __name__ == '__main__':
     musicbot = MumbleJumble()

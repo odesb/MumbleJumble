@@ -19,3 +19,4 @@ def loop(bot):
 
 register.gospam = False
 register.commands = ["pain", "makeitstop"]
+register.enabled = False
