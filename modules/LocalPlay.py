@@ -11,38 +11,11 @@ register.enabled = True
 
 def call(bot, command, arguments):
     if command == 'pwd' and arguments == '':
-        bot.send_msg_current_channel(register.localplayer.root[1] + register.localplayer.working_dir)
-
+        register.localplayer.pwd()
+        
     if command == 'cd':
-        working_path = register.localplayer.working_path()
-        if not arguments.endswith('/'): 
-            arguments += '/'
-
-        if arguments == '/../':
-            bot.send_msg_current_channel('Directory change is not allowed.')
-
-        elif arguments.startswith('/'):
-            root = register.localplayer.root
-            if os.path.exists(root[0] + arguments[1:]):
-                if root[0] + arguments[1:] in register.localplayer.allowed_tree:
-                    register.localplayer.working_dir = arguments[1:]
-                    new_working_path = register.localplayer.working_path()
-                    bot.send_msg_current_channel(new_working_path[1])
-                else:
-                    bot.send_msg_current_channel('Directory change is not allowed.')
-            else:
-                bot.send_msg_current_channel('Directory does not exist.')
-
-        else:
-            working_path = register.localplayer.working_path()
-            if os.path.exists(working_path[0] + arguments):
-                register.localplayer.working_dir += arguments
-                new_working_path = register.localplayer.working_path()
-                bot.send_msg_current_channel(new_working_path[1])
-            else:
-                bot.send_msg_current_channel('Directory does not exist.')
-
-
+        register.localplayer.cd(arguments)
+        
     if command == 'ls':
         l = register.localplayer.ls()
         for string in l:
@@ -104,20 +77,19 @@ class LocalPlayer:
     def __init__(self, parent):
         self.parent = parent
         self.root = (os.path.abspath(self.parent.config['localplay']['local_folder']), '/')
-        self.working_dir = ''
-        #self.allowed_elsewhere = False
+        self.working_dir = '.'
 
 
     def working_path(self):
-        return (self.root[0] + self.working_dir, self.root[1] + self.working_dir)
+        return os.path.join(self.root[0], self.working_dir)
 
 
     def ls(self):
-        l = os.listdir(self.root[0] + self.working_dir)
+        l = os.listdir(self.working_path())
         self.dir_l = []
         self.file_l = []
         for element in l:
-            if os.path.isdir(self.root[0] + self.working_dir + element):
+            if os.path.isdir(os.path.join(self.working_path(), element)):
                 self.dir_l.append(element.encode('ascii', 'ignore'))
             else:
                 self.file_l.append(element.encode('ascii', 'ignore'))
@@ -133,9 +105,39 @@ class LocalPlayer:
         counter = 1
         for i in range(len(l)):
             j = i / 20
-            if os.path.isdir(self.root[0] + self.working_dir + l[i].decode('ascii')):
+            if os.path.islink(os.path.join(self.working_path(), l[i].decode('ascii'))):
+                clean_l[j] += '<br /><b><font color=#5fa5e0>{0}</font></b>'.format(l[i].decode('ascii'))
+            elif os.path.isdir(os.path.join(self.working_path(), l[i].decode('ascii'))):
                 clean_l[j] += '<br /><b>{0}</b>'.format(l[i].decode('ascii'))
             else:
                 clean_l[j] += '<br />{0}. {1}'.format(counter, l[i].decode('ascii'))
                 counter += 1
         return clean_l
+
+
+    def cd(self, arguments):
+        if arguments == '':
+            self.working_dir = '.'
+            self.parent.send_msg_current_channel(self.root[1])
+
+        elif arguments.startswith('/'):
+            if os.path.exists(os.path.join(self.root[0], arguments[1:])):
+                    self.working_dir = arguments[1:]
+                    self.parent.send_msg_current_channel(os.path.join(self.root[1], self.working_dir))
+            else:
+                self.parent.send_msg_current_channel('Directory does not exist.')
+
+        else:
+            future_path = os.path.abspath(os.path.join(self.working_path(), arguments))
+            if os.path.exists(future_path):
+                if os.path.commonprefix([future_path, self.root[0]]) == self.root[0]:
+                    self.working_dir = os.path.relpath(future_path, self.root[0])
+                    self.parent.send_msg_current_channel(os.path.join(self.root[1] ,self.working_dir))
+                else:
+                    self.parent.send_msg_current_channel('Directory change is not allowed')
+            else:
+                self.parent.send_msg_current_channel('Directory does not exist.')
+
+
+    def pwd(self):
+        self.parent.send_msg_current_channel(os.path.join(self.root[1], self.working_dir))
