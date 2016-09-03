@@ -4,6 +4,8 @@ import time
 import os
 import subprocess as sp
 import pafy
+import json
+import traceback
 
 
 
@@ -22,8 +24,8 @@ def call(bot, command_used, arguments):
     if short_url == -1:
         bot.send_msg_current_channel('Could not retrieve URL')
         return
-    # Subthread will process its newly populated songs list
-    register.thread.new_songs.append(Song(short_url))
+    # Subthread will process its newly populated audio list
+    register.thread.new_audio.append(YTAudio(short_url))
     
 
 def get_short_url(message):
@@ -48,56 +50,52 @@ class YTThread(threading.Thread):
     """
     def __init__(self, parent):
         threading.Thread.__init__(self)
-        self.new_songs = deque([]) #Queue of URL to process
+        self.new_audio = deque([]) #Queue of URL to process
         self.parent = parent
         self.reload_count =  self.parent.reload_count
+        self.dl_folder =  os.path.abspath(self.parent.config['youtube']['download_folder'])
+        if not os.path.exists(self.dl_folder):
+            os.mkdir(self.dl_folder)
 
 
     def run(self):
         while self.reload_count == self.parent.reload_count:
-            if len(self.new_songs) > 0: #List gets populated when !a is invoked
-                song = self.new_songs[0]
+            if len(self.new_audio) > 0: #List gets populated when !a is invoked
+                ytaudio = self.new_audio[0]
                 try:
-                    self.parent.send_msg_current_channel('Adding <b>{0}</b> to the queue'.format(song.title))
+                    self.parent.send_msg_current_channel('Adding <b>{0}</b> to the queue'.format(ytaudio.title))
                 except UnicodeEncodeError:
-                    song.title = song.short_url
-                    self.parent.send_msg_current_channel('Adding <b>{0}</b> to the queue'.format(song.title))
-                if not os.path.exists(song.dl_folder + song.title):
+                    ytaudio.title = ytaudio.short_url
+                    self.parent.send_msg_current_channel('Adding <b>{0}</b> to the queue'.format(ytaudio.title))
+                ytaudio.path = os.path.join(self.dl_folder, ytaudio.title)
+                if not os.path.exists(ytaudio.path):
                     try:
-                        song.download()
-                        self.parent.append_audio(song.path, 'complete', song.title)
-                        self.new_songs.popleft() #Done with processing the first URL
+                        self.download(ytaudio)
+                        self.parent.append_audio(ytaudio.path, 'complete', ytaudio.title)
+                        self.new_audio.popleft() #Done with processing the first URL
                     except:
                         print('Cannot download file, aborting!')
-                        self.new_songs.popleft()
+                        self.new_audio.popleft()
                         break
                 else:
-                    song.path = song.dl_folder + song.title
-                    self.parent.append_audio(song.path, 'complete', song.title)
-                    self.new_songs.popleft()
+                    self.parent.append_audio(ytaudio.path, 'complete', ytaudio.title)
+                    self.new_audio.popleft()
             else:
                 time.sleep(0.5)
 
 
-class Song:
-    """Represents a song processed by SubThread and streamed by MumbleJumble"""
+    def download(self, ytaudio):
+        """Downloads music using youtube-dl in the specified dl_folder"""
+        command = ['youtube-dl', 'https://www.youtube.com/watch?v=' + ytaudio.short_url,
+                   '-f', '140', '-o', ytaudio.path]
+        try:
+            sp.call(command)
+        except OSError:
+            print('Cannot download file, aborting!')
+
+
+class YTAudio:
+    """Represents an audio handle processed by YTThread and streamed by MumbleJumble"""
     def __init__(self, short_url):
         self.short_url = short_url # Youtube short URL
         self.title = get_audio_title(self.short_url)
-        self.dl_folder = './.song_library/'
-
-
-    def download(self):
-        """Downloads music using youtube-dl in the specified dl_folder"""
-        if not os.path.exists(self.dl_folder):
-            try:
-                os.mkdir(self.dl_folder)
-            except OSError:
-                print('Could not create dl_folder, aborting!')
-        command = ['youtube-dl', 'https://www.youtube.com/watch?v=' + self.short_url,
-                   '-f', '140', '-o', self.dl_folder + self.title]
-        try:
-            sp.call(command)
-            self.path = self.dl_folder + self.title
-        except OSError:
-            print('Cannot download file, aborting!')

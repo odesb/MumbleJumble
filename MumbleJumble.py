@@ -11,13 +11,19 @@ import time
 import traceback
 import threading
 import io
+import json
 
+SCRIPTPATH = os.path.dirname(__file__)
 # Add pymumble folder to python PATH for importing
-sys.path.append(os.path.join(os.path.dirname(__file__), "pymumble"))
+sys.path.append(os.path.join(SCRIPTPATH, 'pymumble'))
 import pymumble
 
+PIDFILE = '/tmp/mj.pid'
+ARGLIST = ['--server', '--port', '--user', '--password', '--certfile', 
+           '--reconnect', '--debug']
 
-def get_arg_value(arg, args_list, default=None):
+
+def get_arg_value(arg):
     """Retrieves the values associated to command line arguments
     Possible arguments:
     --server    Mumble server address
@@ -28,17 +34,40 @@ def get_arg_value(arg, args_list, default=None):
     --reconnect Bot reconnects to the server if disconnected
     --debug     Debug=True will generate a lot of stdout messages
     """
-    if arg in args_list:
+    if arg in sys.argv[1:]:
         try:
-            return args_list[args_list.index(arg) + 1]
+            return sys.argv[1:][sys.argv[1:].index(arg) + 1]
         except IndexError:
             sys.exit('Value of parameter ' + arg + ' is missing!')
-    elif default != None or arg == '--certfile':
-        # Falls back to default if no parameter given
-        # Parameter --certfile's default has to be None
-        return default
+
+
+def arg_in_arglist(arg, args_list):
+    if arg in args_list:
+        return True
     else:
-        sys.exit('Parameter ' + arg + ' is missing!')
+        return False
+
+
+def num_scripts():
+    if os.path.isfile(PIDFILE):
+        with open(PIDFILE) as f:
+            return len(f.readlines())
+    return 0
+
+
+def writepid():
+    mode = 'a' if os.path.isfile(PIDFILE) else 'w'
+    with open(PIDFILE, mode) as f:
+        f.write(str(os.getpid()) + '\n')
+        
+
+def deletepid():
+    with open(PIDFILE, 'r') as f:
+        lines = f.readlines()
+    with open(PIDFILE, 'w') as f:
+        for line in lines:
+            if line != str(os.getpid()) + '\n':
+                f.write(line)
 
 
 class MJModule:
@@ -52,17 +81,36 @@ class MumbleJumble:
     """Represents the Mumble client interacting with users and outputting sound
     """
     def __init__(self):
-        host = get_arg_value('--server', sys.argv[1:])
-        port = int(get_arg_value('--port', sys.argv[1:], default=64738))
-        user = get_arg_value('--user', sys.argv[1:], default='@MumbleJumble')
-        password = get_arg_value('--password', sys.argv[1:], default='')
-        certfile = get_arg_value('--certfile', sys.argv[1:], default=None)
-        reconnect = get_arg_value('--reconnect', sys.argv[1:], default=False)
-        debug = get_arg_value('--debug', sys.argv[1:], default=False)
+        with open(os.path.join(SCRIPTPATH, 'config.json')) as json_config_file:
+            self.config = json.load(json_config_file)
 
-        self.client = pymumble.Mumble(host=host, port=port, user=user, password=
-                                   password, certfile=certfile,
-                                   reconnect=reconnect, debug=debug)
+        pymumble_parameters = {}
+        for arg in ARGLIST:
+            if arg == '--user':
+                try:
+                    pymumble_parameters[arg[2:]] = self.config['bot'][arg[2:]][num_scripts()]
+                except IndexError:
+                    if arg in sys.argv[1:]:
+                        pymumble_parameters[arg[2:]] = get_arg_value(arg)
+                    else:
+                        sys.exit('Usernames already taken')
+            else:
+                pymumble_parameters[arg[2:]] = self.config['bot'][arg[2:]]
+            if arg_in_arglist(arg, sys.argv[1:]):
+                pymumble_parameters[arg[2:]] = get_arg_value(arg)
+            if arg == '--server':
+                if pymumble_parameters['server'] == "":
+                    sys.exit('Server address is missing!')
+
+        writepid()
+
+        self.client = pymumble.Mumble(host=pymumble_parameters['server'], 
+                                      port=pymumble_parameters['port'],
+                                      user=pymumble_parameters['user'], 
+                                      password=pymumble_parameters['password'],
+                                      certfile=pymumble_parameters['certfile'],
+                                      reconnect=pymumble_parameters['reconnect'], 
+                                      debug=pymumble_parameters['debug'])
 
         # Sets to client to call command_received when a user sends text
         self.client.callbacks.set_callback('text_received', self.command_received)
@@ -78,8 +126,8 @@ class MumbleJumble:
         self.client.is_ready() # Wait for the connection
         self.client.set_bandwidth(200000)
         self.client.users.myself.unmute() # Be sure the client is not muted
-        comment = open(os.path.dirname(__file__) + '/bot_comment.txt', 'r')
-        self.client.users.myself.comment(comment.read())
+        with open(os.path.join(SCRIPTPATH, 'comment')) as comment:
+            self.client.users.myself.comment(comment.read())
 
         self.load_modules()
 
@@ -112,11 +160,10 @@ class MumbleJumble:
         self.registered_modules = [] # List of module objects
 
         # Lists modules
-        home = os.path.dirname(__file__)
         filenames = []
-        for fn in os.listdir(os.path.join(home, 'modules')):
+        for fn in os.listdir(os.path.join(SCRIPTPATH, 'modules')):
             if fn.endswith('.py') and not fn.startswith('_'):
-                filenames.append(os.path.join(home, 'modules', fn))
+                filenames.append(os.path.join(SCRIPTPATH, 'modules', fn))
 
         # Tries to import modules
         modules = []
@@ -299,30 +346,34 @@ class MumbleJumble:
         song in SubThread's song queue
         """
         while True:
-            if len(self.audio_queue) > 0:
-                while self.audio_queue[0].current_sample <= self.audio_queue[0].total_samples:
-                    while self.paused:
-                        time.sleep(0.1)
-                    while self.client.sound_output.get_buffer_size() > 0.5:
-                        time.sleep(0.1)
-                    if not self.skipFlag:
-                        self.client.sound_output.add_sound(audioop.mul(
-                                        self.audio_queue[0].samples[self.audio_queue[0].current_sample],
-                                        2, self.volume))
-                        self.audio_queue[0].current_sample += 1
-                    elif self.skipFlag:
-                        self.skipFlag = False
-                        break
-                try:
-                    # Removes the first song from the queue
-                    # Will fail if clear command is passed, not a problem though
-                    self.audio_queue.popleft()
-                except:
-                    pass
-                finally:
-                    time.sleep(1) # To allow time between songs
-            else:
-                time.sleep(0.5)
+            try:
+                if len(self.audio_queue) > 0:
+                    while self.audio_queue[0].current_sample <= self.audio_queue[0].total_samples:
+                        while self.paused:
+                            time.sleep(0.1)
+                        while self.client.sound_output.get_buffer_size() > 0.5:
+                            time.sleep(0.1)
+                        if not self.skipFlag:
+                            self.client.sound_output.add_sound(audioop.mul(
+                                            self.audio_queue[0].samples[self.audio_queue[0].current_sample],
+                                            2, self.volume))
+                            self.audio_queue[0].current_sample += 1
+                        elif self.skipFlag:
+                            self.skipFlag = False
+                            break
+                    try:
+                        # Removes the first song from the queue
+                        # Will fail if clear command is passed, not a problem though
+                        self.audio_queue.popleft()
+                    except:
+                        pass
+                    finally:
+                        time.sleep(1) # To allow time between songs
+                else:
+                    time.sleep(0.5)
+            except KeyboardInterrupt:
+                deletepid()
+                sys.exit('Exiting!')
 
 
 class ffmpegThread(threading.Thread):
@@ -365,7 +416,7 @@ class ffmpegThread(threading.Thread):
                 audio.samples[counter] = out.read(88200)
                 if len(audio.samples[counter]) == 0:
                     audio.total_samples = counter
-                    return audio
+                    return
                 counter += 1
 
 

@@ -3,7 +3,7 @@ import re
 import random
 
 def register(bot):
-    register.localplayer = LocalPlayer()
+    register.localplayer = LocalPlayer(bot)
     print('Current local root: ' + register.localplayer.root[0])
 
 register.commands = ['cd', 'ls', 'play', 'pwd', 'rplay']
@@ -36,12 +36,9 @@ def call(bot, command, arguments):
         else:
             working_path = register.localplayer.working_path()
             if os.path.exists(working_path[0] + arguments):
-                if working_path[0] + arguments in register.localplayer.allowed_tree:
-                    register.localplayer.working_dir += arguments
-                    new_working_path = register.localplayer.working_path()
-                    bot.send_msg_current_channel(new_working_path[1])
-                else:
-                    bot.send_msg_current_channel('Directory change is not allowed.')
+                register.localplayer.working_dir += arguments
+                new_working_path = register.localplayer.working_path()
+                bot.send_msg_current_channel(new_working_path[1])
             else:
                 bot.send_msg_current_channel('Directory does not exist.')
 
@@ -98,20 +95,17 @@ def play_music(bot, arguments):
             else:
                 audio_file = whole_l[start:end].split(' ', 1)[1]
             bot.send_msg_current_channel('Adding <b>{0}</b> to the queue'.format(audio_file))
-            bot.append_audio(register.localplayer.root[0] + register.localplayer.working_dir + audio_file, 'complete', audio_file)
+            bot.append_audio(os.path.join(register.localplayer.root[0], register.localplayer.working_dir, audio_file), 'complete', audio_file)
         except:
             pass
 
 
 class LocalPlayer:
-    def __init__(self):
-        self.root = ('/home/olivier/Projects/MumbleJumble/.song_library/', '/')
+    def __init__(self, parent):
+        self.parent = parent
+        self.root = (os.path.abspath(self.parent.config['localplay']['local_folder']), '/')
         self.working_dir = ''
         #self.allowed_elsewhere = False
-
-        self.allowed_tree = [self.root[0]]
-        for root, dirs, files in os.walk(self.root[0] + self.working_dir):
-            self.allowed_tree.append(root + '/')
 
 
     def working_path(self):
@@ -124,9 +118,9 @@ class LocalPlayer:
         self.file_l = []
         for element in l:
             if os.path.isdir(self.root[0] + self.working_dir + element):
-                self.dir_l.append(element)
+                self.dir_l.append(element.encode('ascii', 'ignore'))
             else:
-                self.file_l.append(element)
+                self.file_l.append(element.encode('ascii', 'ignore'))
         dir_l_sorted = sorted(self.dir_l, key=str.lower)
         file_l_sorted = sorted(self.file_l, key=str.lower)
         l = dir_l_sorted + file_l_sorted
@@ -139,9 +133,9 @@ class LocalPlayer:
         counter = 1
         for i in range(len(l)):
             j = i / 20
-            if os.path.isdir(self.root[0] + self.working_dir + l[i]):
-                clean_l[j] += '<br /><b>{0}</b>'.format(l[i])
+            if os.path.isdir(self.root[0] + self.working_dir + l[i].decode('ascii')):
+                clean_l[j] += '<br /><b>{0}</b>'.format(l[i].decode('ascii'))
             else:
-                clean_l[j] += '<br />{0}. {1}'.format(counter, l[i])
+                clean_l[j] += '<br />{0}. {1}'.format(counter, l[i].decode('ascii'))
                 counter += 1
         return clean_l
