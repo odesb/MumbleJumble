@@ -122,6 +122,7 @@ class MumbleJumble:
         self.volume = 1.00
         self.paused = False
         self.skipFlag = False
+        self.startStream = False
         self.reload_count = 0
         self.client.is_ready() # Wait for the connection
         self.client.set_bandwidth(200000)
@@ -240,7 +241,12 @@ class MumbleJumble:
      
 
     def append_audio(self, audio_file, audio_type, audio_title='N/A'):
-        self.ffmpegthread.audio2process.append((audio_file, audio_type, audio_title))
+        if self.startStream == True and audio_type == 'single_file':
+            self.send_msg_current_channel('Stream in progress, cannot add audio')
+        elif self.startStream == True and audio_type == 'stream':
+            self.ffmpegthread.audio2process.append((audio_file, audio_type, audio_title))
+        elif self.startStream == False:
+            self.ffmpegthread.audio2process.append((audio_file, audio_type, audio_title))
 
 
     def get_current_channel(self):
