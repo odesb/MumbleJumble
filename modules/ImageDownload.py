@@ -110,6 +110,6 @@ def register(bot):
         os.mkdir(IMAGE_CACHE)
 
 register.commands = ["i", "img"]
-register.background = True
+register.enabled = True
 # register.call_in_loop = True
 

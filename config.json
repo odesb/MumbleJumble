@@ -9,9 +9,9 @@
 		"debug":false
 	},
 	"youtube":{
-		"download_folder":""
+		"download_folder":"/home/olivier/Projects/MumbleJumble/.song_library"
 	},
 	"localplay":{
-		"local_folder":""
+		"local_folder":"/home/olivier/Projects/MumbleJumble/.song_library"
 	}
 }

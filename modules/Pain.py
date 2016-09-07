@@ -1,22 +1,36 @@
-import modules.ImageDownload
-import modules.Youtube
+import Youtube
+import ImageDownload
+import random
 
-# This is a great way to lose all your friends
-def call(bot, command_used, arguments):
-    if command_used == "pain":
-        register.gospam = True;
-        Youtube.call(bot, "a", "https://www.youtube.com/watch?v=z48NmdWbquw")
-    elif command_used == "makeitstop":
-        register.gospam = False
-        bot.clear_queue()
+SHREKLIST= ['http://vignette4.wikia.nocookie.net/trollpasta/images/a/a1/Shrek_scary_face.jpg/revision/latest?cb=20140724065638',
+        'https://t7.rbxcdn.com/7ad2cf73acdea316ecc78941d1cc4e6c',
+        'http://i0.kym-cdn.com/photos/images/facebook/000/498/869/a3f.jpg',
+        'http://i0.kym-cdn.com/photos/images/facebook/000/526/244/aac.png',
+        'http://i1.kym-cdn.com/photos/images/newsfeed/000/488/509/54f.png',
+        'http://i1.kym-cdn.com/photos/images/newsfeed/000/665/128/cb0.png',
+        'http://67.media.tumblr.com/4f50d9c68954b44ae8fb75917a8689a7/tumblr_ns7nqoIGZd1uvuwdlo1_250.jpg',
+        'http://i0.kym-cdn.com/photos/images/newsfeed/000/488/341/d27.png']
 
 def register(bot):
     pass
 
-def loop(bot):
-    if(register.gospam):
-        ImageDownload.call(bot, "i", "https://t7.rbxcdn.com/7ad2cf73acdea316ecc78941d1cc4e6c")
-
-register.gospam = False
 register.commands = ["pain", "makeitstop"]
-register.enabled = False
+register.enabled = True
+
+# This is a great way to lose all your friends
+def call(bot, command_used, arguments):
+    if command_used == "pain":
+        loop.spam = True;
+        Youtube.call(bot, "a", "https://www.youtube.com/watch?v=z48NmdWbquw")
+    elif command_used == "makeitstop":
+        loop.spam = False
+        bot.skip('!s', '')
+
+
+
+def loop(bot):
+    if loop.spam:
+        ImageDownload.call(bot, "i", random.choice(SHREKLIST))
+
+loop.spam = False
+loop.time = 1

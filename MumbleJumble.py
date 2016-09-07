@@ -19,9 +19,6 @@ sys.path.append(os.path.join(SCRIPTPATH, 'pymumble'))
 import pymumble
 
 PIDFILE = '/tmp/mj.pid'
-ARGLIST = ['--server', '--port', '--user', '--password', '--certfile', 
-           '--reconnect', '--debug']
-
 
 def get_arg_value(arg):
     """Retrieves the values associated to command line arguments
@@ -85,7 +82,10 @@ class MumbleJumble:
             self.config = json.load(json_config_file)
 
         pymumble_parameters = {}
-        for arg in ARGLIST:
+        arglist = ['--server', '--port', '--user', '--password', '--certfile', 
+                   '--reconnect', '--debug']
+
+        for arg in arglist:
             if arg == '--user':
                 try:
                     pymumble_parameters[arg[2:]] = self.config['bot'][arg[2:]][num_scripts()]
@@ -200,7 +200,7 @@ class MumbleJumble:
                             else:
                                 print("  Registering '{0}' - for module '{1}'".format(command, module.__name__))
                                 self.registered_commands[command] = ('module', module_object.call)
-                    except AttributeError:
+                    except TypeError:
                         print("  No commands registered for module '{0}'".format(module.__name__))
 
                 else:
@@ -263,7 +263,7 @@ class MumbleJumble:
             try:
                 select = int(arguments)
                 self.audio_queue.remove(self.audio_queue[select - 1])
-            except ValueError:
+            except (ValueError, IndexError):
                 self.send_msg_current_channel('Not a valid value!')
         else:
             self.skipFlag = True
@@ -327,17 +327,17 @@ class MumbleJumble:
 
 
     def seek(self, command, arguments):
-        """Format has to be HH:MM:SS"""
-        if arguments[2]  == ':' and arguments[5] == ':' and self.audio_queue > 0:
-            try:
-                seconds = duration2sec(arguments + '.00')
-                if 0 <= seconds <= duration2sec(self.audio_queue[0].duration):
-                    sample_len = duration2sec(self.audio_queue[0].duration) / float(self.audio_queue[0].total_samples)
-                    self.audio_queue[0].current_sample = int(seconds / sample_len)
-                else:
-                    self.send_msg_current_channel('Cannot seek to specified value.')
-            except:
+        mod_arg = arguments.replace(':', '').zfill(6)
+        new_time = '{0}:{1}:{2}.00'.format(mod_arg[0:2], mod_arg[2:4], mod_arg[4:6])
+        try:
+            seconds = duration2sec(new_time)
+            if 0 <= seconds <= duration2sec(self.audio_queue[0].duration):
+                sample_len = duration2sec(self.audio_queue[0].duration) / float(self.audio_queue[0].total_samples)
+                self.audio_queue[0].current_sample = int(seconds / sample_len)
+            else:
                 self.send_msg_current_channel('Cannot seek to specified value.')
+        except:
+            self.send_msg_current_channel('Cannot seek to specified value.')
 
 
 
