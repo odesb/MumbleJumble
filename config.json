@@ -2,7 +2,7 @@
 	"bot":{
 		"server":"",
 		"port":64738,
-		"user":["@MumbleJumble"],
+		"user":["@MumbleJumble", "@BUMBLEBEE", "@JIJMAESTER", "@NSAOFFICER"],
 		"password":"",
 		"certfile":null,
 		"reconnect":false,
