@@ -1,6 +1,7 @@
 import urllib2
 import random
 import threading
+import time
 
 MP3LIST = 'http://jetsetradio.live/audioplayer/audio/~list.js'
 
@@ -40,6 +41,8 @@ class JetSetRadioPlayer(threading.Thread):
             if len(self.parent.audio_queue) == 0:
                 song = random.choice(self.mp3_list)
                 f = urllib2.urlopen('http://jetsetradio.live/audioplayer/audio/{0}.mp3'.format(song.replace(' ', '%20')))
-                g = f.read(176400)
-                self.parent.append_audio(f, 'stream', song)
-                self.exit = True
+                fragment = f.read(88200 * 10)
+                while len(fragment) > 0:
+                    self.parent.append_audio(fragment, 'stream', song)
+                    fragment = f.read(88200 * 10)
+            time.sleep(1)

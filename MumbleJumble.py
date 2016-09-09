@@ -2,7 +2,6 @@
 from __future__ import print_function
 
 from collections import deque
-import subprocess as sp
 import os
 import imp
 import sys
@@ -10,8 +9,8 @@ import audioop
 import time
 import traceback
 import threading
-import io
 import json
+import handles
 
 SCRIPTPATH = os.path.dirname(__file__)
 # Add pymumble folder to python PATH for importing
@@ -241,7 +240,7 @@ class MumbleJumble:
      
 
     def append_audio(self, audio_file, audio_type, audio_title='N/A'):
-        if self.startStream == True and audio_type == 'single_file':
+        if self.startStream == True and audio_type == 'complete':
             self.send_msg_current_channel('Stream in progress, cannot add audio')
         elif self.startStream == True and audio_type == 'stream':
             self.ffmpegthread.audio2process.append((audio_file, audio_type, audio_title))
@@ -291,14 +290,6 @@ class MumbleJumble:
         self.audio_queue = deque([])
 
 
-    def current_song_status(self):
-        """Returns the completion of the song in %. Associated with the queue
-        command.
-        """
-        return float(self.audio_queue[0].current_sample) / float(
-                self.audio_queue[0].total_samples) * 100
-
-
     def print_queue(self, command, arguments):
         """Creates a printable queue suited for the Mumble chat. Associated with
         the queue command. Checks the processing and processed song lists of the
@@ -311,16 +302,18 @@ class MumbleJumble:
             for i in range(len(self.audio_queue)):
                 if i == 0:
                     if self.paused:
-                        queue += '<br />{0}<b> - Paused - {1}/{2} ({3}%)</b>'.format(
-                                self.audio_queue[0].title, self.audio_queue[0].get_current_status()[:-3], 
-                                self.audio_queue[0].duration[:-3], int(self.current_song_status()))
+                        queue += '<br />{0}<b> - Paused - {1}</b>'.format(
+                                self.audio_queue[0].printable_queue_format()[0], 
+                                self.audio_queue[0].printable_queue_format()[1])
                     elif not self.paused:
-                        queue += '<br />{0}<b> - Playing - {1}/{2} ({3}%)</b>'.format(
-                                self.audio_queue[0].title, self.audio_queue[0].get_current_status()[:-3], 
-                                self.audio_queue[0].duration[:-3], int(self.current_song_status()))
+                        queue += '<br />{0}<b> - Playing - {1}</b>'.format(
+                                self.audio_queue[0].printable_queue_format()[0], 
+                                self.audio_queue[0].printable_queue_format()[1])
+
                 else:
-                    queue += '<br />{0}<b> - Ready - {1}</b>'.format(self.audio_queue[i].title,
-                                                                     self.audio_queue[i].duration[:-3])
+                    queue += '<br />{0}<b> - Ready - {1}</b>'.format(
+                                            self.audio_queue[i].printable_queue_format()[0],
+                                            self.audio_queue[i].printable_queue_format()[1])
         self.send_msg_current_channel(queue)
 
 
@@ -336,10 +329,9 @@ class MumbleJumble:
         mod_arg = arguments.replace(':', '').zfill(6)
         new_time = '{0}:{1}:{2}.00'.format(mod_arg[0:2], mod_arg[2:4], mod_arg[4:6])
         try:
-            seconds = duration2sec(new_time)
-            if 0 <= seconds <= duration2sec(self.audio_queue[0].duration):
-                sample_len = duration2sec(self.audio_queue[0].duration) / float(self.audio_queue[0].total_samples)
-                self.audio_queue[0].current_sample = int(seconds / sample_len)
+            seconds = handles.duration2sec(new_time)
+            if 0 <= seconds <= handles.duration2sec(self.audio_queue[0].duration):
+                self.audio_queue[0].seek(seconds)
             else:
                 self.send_msg_current_channel('Cannot seek to specified value.')
         except:
@@ -393,75 +385,20 @@ class ffmpegThread(threading.Thread):
     def run(self):
         while True:
             if len(self.audio2process) > 0:
-                audio = AudioHandle(self.audio2process[0][0], self.audio2process[0][1], self.audio2process[0][2])
+                if self.audio2process[0][1] == 'complete':
+                    audio = handles.AudioFileHandle(self.audio2process[0][0], self.audio2process[0][2])
+                elif self.audio2process[0][1] == 'stream':
+                    audio = handles.StreamHandle(self.audio2process[0][0], self.audio2process[0][2])
                 try:
-                    self.process(audio)
+                    audio.process()
                     self.parent.audio_queue.append(audio)
                     self.audio2process.popleft()
-                except:
+                except Exception as e:
+                    print(e)
                     print('Cannot process audio file, aborting!')
                     self.audio2process.popleft()
             else:
                 time.sleep(0.5)
-
-
-    def process(self, audio):
-        """ Converts and splits the song into the suitable format to stream to
-        mumble server (mono PCM 16 bit little-endian), using ffmpeg
-        """
-        command = ['ffmpeg', '-i', audio.file, '-f', 's16le', '-acodec', 
-                   'pcm_s16le', '-ac', '1', '-ar', '48000', '-']
-        p = sp.Popen(command, stdout=sp.PIPE, stderr=sp.PIPE)
-        stdout, stderr = p.communicate()
-        print(stderr)
-        counter = 1
-        start = stderr.find('Duration: ')
-        audio.duration = stderr[start + 10:start + 21]
-        with io.BytesIO(stdout) as out:
-            while True:
-                audio.samples[counter] = out.read(88200)
-                if len(audio.samples[counter]) == 0:
-                    audio.total_samples = counter
-                    return
-                counter += 1
-
-
-class AudioHandle:
-    def __init__(self, audio_file, audio_type, audio_title):
-        self.file = audio_file
-        self.type = audio_type
-        self.title = audio_title
-        self.duration = None
-        self.total_samples = None
-        self.samples = {}
-        self.current_sample = 1
-
-    def get_sample_len(self):
-        """Get length of sample in seconds"""
-        return duration2sec(self.duration) / float(self.total_samples)
-
-
-    def get_current_status(self):
-        sample_len = duration2sec(self.duration) / float(self.total_samples)
-        current_sec = self.current_sample * sample_len
-        return sec2duration(current_sec)
-
-
-def duration2sec(duration):
-    seconds = float(duration[8:11])
-    seconds += float(duration[6:8])
-    seconds += float(duration[3:5]) * 60
-    seconds += float(duration[0:2]) * 3600
-    return seconds
-
-
-def sec2duration(seconds):
-    hours = str(int(seconds / 3600)).zfill(2)
-    rem = seconds % 3600
-    minutes = str(int(rem / 60)).zfill(2)
-    seconds = str(int(rem % 60)).zfill(2)
-    milli = str(float(rem % 60 / 10))[1:4]
-    return '{0}:{1}:{2}{3}'.format(hours, minutes, seconds, milli)
 
 
 class LoopThread(threading.Thread):
@@ -478,6 +415,7 @@ class LoopThread(threading.Thread):
                 if hasattr(module, 'loop') and hasattr(module.loop, 'time'):
                     if self.counter % module.loop.time == 0:
                         module.loop(self.parent)
+
 
 if __name__ == '__main__':
     musicbot = MumbleJumble()

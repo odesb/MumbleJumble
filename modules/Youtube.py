@@ -4,7 +4,6 @@ import time
 import os
 import subprocess as sp
 import pafy
-import json
 import traceback
 
 
@@ -20,12 +19,15 @@ register.enabled = True
 
 
 def call(bot, command_used, arguments):
+    url = arguments.replace('<a href="', '')
+    end = url.find('">')
+    url = url[:end]
     short_url = get_short_url(arguments)
     if short_url == -1:
-        bot.send_msg_current_channel('Could not retrieve URL')
-        return
+        register.thread.new_audio.append(YTAudio(url))
     # Subthread will process its newly populated audio list
-    register.thread.new_audio.append(YTAudio(short_url))
+    else:
+        register.thread.new_audio.append(YTAudio(url, short_url))
     
 
 def get_short_url(message):
@@ -86,8 +88,7 @@ class YTThread(threading.Thread):
 
     def download(self, ytaudio):
         """Downloads music using youtube-dl in the specified dl_folder"""
-        command = ['youtube-dl', 'https://www.youtube.com/watch?v=' + ytaudio.short_url,
-                   '-f', '140', '-o', ytaudio.path]
+        command = ['youtube-dl', ytaudio.url, '-o', ytaudio.path]
         try:
             sp.call(command)
         except OSError:
@@ -96,6 +97,9 @@ class YTThread(threading.Thread):
 
 class YTAudio:
     """Represents an audio handle processed by YTThread and streamed by MumbleJumble"""
-    def __init__(self, short_url):
+    def __init__(self, url, short_url=None):
+        self.url = url
         self.short_url = short_url # Youtube short URL
-        self.title = get_audio_title(self.short_url)
+        self.title = 'test'
+        if self.short_url != None:
+            self.title = get_audio_title(self.short_url)
