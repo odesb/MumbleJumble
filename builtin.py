@@ -66,7 +66,7 @@ def print_queue(bot, command, arguments):
                 for j in range(len(bot.audio_queue[i].leaves)):
                     title = bot.audio_queue[i].leaves[j].printable_queue_format()[0]
                     status = bot.audio_queue[i].leaves[j].printable_queue_format()[1]
-                    if i == 0 and j == 1:
+                    if i == 0 and j == 0:
                         if bot.paused:
                             queue += '<br />|---- {0}<b> - Paused - {1}</b>'.format(title, status)
                         elif not bot.paused:
