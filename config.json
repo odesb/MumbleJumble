@@ -1,0 +1,17 @@
+{
+	"bot":{
+		"server":"",
+		"port":64738,
+		"user":["@MumbleJumble"],
+		"password":"",
+		"certfile":null,
+		"reconnect":false,
+		"debug":false
+	},
+	"youtube":{
+		"download_folder":""
+	},
+	"localplay":{
+		"local_folder":""
+	}
+}

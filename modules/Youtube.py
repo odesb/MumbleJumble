@@ -1,45 +1,46 @@
-from collections import deque
+from __future__ import unicode_literals
+
 import threading
-import time
 import os
-import subprocess as sp
-import pafy
+import youtube_dl
+import time
 
 
 
 def register(bot):
-    bot.threads['yt_thread'] = YTThread(bot)
-    bot.threads['yt_thread'].daemon = True
-    bot.threads['yt_thread'].start()
+    register.thread = YTThread(bot)
 
 
 register.commands = ['a', 'add']
+register.enabled = True
 
 
 def call(bot, command_used, arguments):
-    short_url = get_short_url(arguments)
-    bot.send_msg_current_channel("Trying to download song from link '{0}'".format(short_url))
-    if short_url == -1:
-        bot.send_msg_current_channel('Could not retrieve URL')
-        return
-    # Subthread will process its newly populated songs list
-    bot.threads['yt_thread'].new_songs.append(Song(short_url))
+    url = arguments.replace('<a href="', '')
+    end = url.find('">')
+    url = url[:end]
+    info = extract_info(url)
+    title = info['title']
+    try:
+        if info['_type'] == 'playlist':
+            bot.send_msg_current_channel('Adding <b>{0} - PLAYLIST</b> to the queue'.format(title))
+            package = (url, info, 'playlist')
+    except KeyError:
+        bot.send_msg_current_channel('Adding <b>{0}</b> to the queue'.format(title))
+        package = (url, info, 'single')
+    # Subthread will process its newly populated audio list
+    if register.thread.isAlive():
+        register.thread.new_audio.append(package)
+    else:
+        register.thread = YTThread(bot)
+        register.thread.new_audio.append(package)
+        register.thread.start()
+        
 
-
-def get_short_url(message):
-    """Gives a shorter version of URL, useful to store files"""
-    patterns = ['watch?v=', 'youtu.be/']
-    for i in patterns:
-        if i in message:
-            start = message.find(i) + len(i)
-            return message[start:start + 11]
-    return -1
+def extract_info(url):
+    with youtube_dl.YoutubeDL({}) as ydl:
+        return ydl.extract_info(url, download=False, process=False)
     
-
-def get_audio_title(short_url):
-    url = 'https://www.youtube.com/watch?v=' + short_url
-    return pafy.new(url).title
-
 
 class YTThread(threading.Thread):
     """A subthread of the main thread, takes care of downloading, converting and
@@ -48,65 +49,58 @@ class YTThread(threading.Thread):
     """
     def __init__(self, parent):
         threading.Thread.__init__(self)
-        self.new_songs = deque([]) #Queue of URL to process
+        self.new_audio = [] #Queue of URL to process
         self.parent = parent
-        self.index = None
-
-
-    def run(self):
-        while True:
-            if len(self.new_songs) > 0: #List gets populated when !a is invoked
-                song = self.new_songs[0]
-                self.parent.send_msg_current_channel('Adding ' + '<b>' 
-                                                     + song.title
-                                                     + '</b>' + ' to the queue.')
-                if not os.path.exists(song.dl_folder + song.title):
-                    song.download()
-                song.convert_split()
-                self.parent.audio_queue.append(song)
-                self.new_songs.popleft() #Done with processing the first URL
-            else:
-                time.sleep(0.1)
-
-
-class Song:
-    """Represents a song processed by SubThread and streamed by MumbleJukeBox"""
-    def __init__(self, short_url):
-        self.samples = dict() # Will contain each samples and total # of samples
-        self.short_url = short_url # Youtube short URL
-        self.title = get_audio_title(self.short_url)
-        self.dl_folder = './.song_library/'
-        self.pipe = None
-
-
-    def download(self):
-        """Downloads music using youtube-dl in the specified dl_folder"""
+        self.reload_count = self.parent.reload_count
+        self.dl_folder = os.path.abspath(self.parent.config['youtube']['download_folder'])
+        self.exit = False
+        self.daemon = True
         if not os.path.exists(self.dl_folder):
             try:
                 os.mkdir(self.dl_folder)
             except OSError:
-                print('Could not create dl_folder, exiting!')
-        command = ['youtube-dl', 'https://www.youtube.com/watch?v=' + self.short_url,
-                   '-f', '140', '-o', self.dl_folder + self.title]
-        try:
-            sp.call(command)
-        except OSError:
-            sys.exit('Cannot download file, exiting!')
+                self.exit = True
+                print('Could not create download folder, aborting!')
 
 
-    def convert_split(self):
-        """ Converts and splits the song into the suitable format to stream to
-        mumble server (mono PCM 16 bit little-endian), using ffmpeg
-        """
-        command = ["ffmpeg", '-i', self.dl_folder + self.title, '-f',
-                   's16le', '-acodec', 'pcm_s16le', '-ac', '1', '-ar',
-                   '48000', '-']
-        self.pipe = sp.Popen(command, stdout=sp.PIPE)
-        counter = 0
-        while True:
-            self.samples[counter] = self.pipe.stdout.read(88200)
-            if len(self.samples[counter]) == 0:
-                self.samples['total_samples'] = counter
-                return
-            counter += 1
+    def run(self):
+        while self.reload_count == self.parent.reload_count and self.new_audio:
+            url = self.new_audio[0][0]
+            info = self.new_audio[0][1]
+            if self.new_audio[0][2] == 'playlist':
+                audio_q_format = info['title'] + '<b> - PLAYLIST</b>'
+                self.new_audio[0] = [('https://www.youtube.com/watch?v=' + x['url'], x['title']) for x in info['entries']]
+                playlist_added = False
+                while self.new_audio[0]:
+                    current = self.new_audio[0][0]
+                    file_path = os.path.join(self.dl_folder, current[1])
+                    ydl_opts = {'format': 'bestaudio','outtmpl': file_path}
+                    with youtube_dl.YoutubeDL(ydl_opts) as ydl:
+                        try:
+                            ydl.download([current[0]])
+                        except Exception as e:
+                            print(e)
+                    self.parent.append_audio(file_path, current[1].encode('ascii', 'ignore'), audio_q_format)
+                    del self.new_audio[0][0]
+                    while not playlist_added:
+                        for i in self.parent.audio_queue:
+                            if str(i) == audio_q_format:
+                                playlist_added = True
+                        time.sleep(3)
 
+
+            elif self.new_audio[0][2] == 'single':
+                title = info['title']
+                file_path = os.path.join(self.dl_folder, title)
+                if os.path.exists(file_path):
+                    self.parent.append_audio(file_path, title.encode('ascii', 'ignore'))
+                    del self.new_audio[0]
+                else:
+                    ydl_opts = {'format': 'bestaudio', 'outtmpl': file_path}
+                    with youtube_dl.YoutubeDL(ydl_opts) as ydl:
+                        try:
+                            ydl.download([url])
+                        except Exception as e:
+                            print(e)
+                    self.parent.append_audio(file_path, title.encode('ascii', 'ignore'))
+                    del self.new_audio[0]
