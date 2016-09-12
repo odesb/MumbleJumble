@@ -117,12 +117,14 @@ class MumbleJumble:
         self.client.callbacks.set_callback('text_received', self.command_received)
 
         self.audio_queue = [] # Queue of audio ready to be sent
+        self.branches = {}
 
         self.client.start() # Start the mumble thread
 
         self.volume = 1.00
         self.paused = False
-        self.skipFlag = False
+        self.skipLeaf = False
+        self.skipBranch = False
         self.reload_count = 0
         self.client.is_ready() # Wait for the connection
         self.client.set_bandwidth(200000)
@@ -133,11 +135,9 @@ class MumbleJumble:
         self.load_modules()
 
         self.ffmpegthread = ffmpegThread(self)
-        self.ffmpegthread.daemon = True
         self.ffmpegthread.start()
 
         self.loopthread = LoopThread(self)
-        self.loopthread.daemon = True
         self.loopthread.start()
 
         self.audio_loop() # Loops the main thread
@@ -213,7 +213,7 @@ class MumbleJumble:
 
     
     def get_current_channel(self):
-        """Get the client's current channel (a dict)"""
+        """Get the client's current channel (dict)"""
         try:
             return self.client.channels[self.client.users.myself['channel_id']]
         except KeyError:
@@ -241,9 +241,37 @@ class MumbleJumble:
                 self.registered_commands[command](self, command, arguments)
      
 
-    def append_audio(self, audio_file, audio_title, branch=None, pipe=False):
-            self.ffmpegthread.audio2process.append((audio_file, audio_title, branch, pipe))
+    def append_audio(self, audio_file, audio_title, branchname=None, pipe=False):
+            self.ffmpegthread.audio2process.append((audio_file, audio_title, branchname, pipe))
 
+    def append_branch(self, branch):
+        self.audio_queue.append(branch)
+        self.branches[str(branch)] = branch.leaves
+
+    def append_leaf(self, leaf, branch=None):
+        if branch is None: #Doesn't need to be in self.branches
+            self.audio_queue.append(leaf)
+        else:
+            if str(branch) in self.branches:
+                for i, x in enumerate(self.audio_queue):
+                    if str(x) == str(branch):
+                        self.audio_queue[i].add(leaf) # Will add to self.branches too
+                        break
+            else:
+                self.append_branch(branch)
+
+    def delete_branch(self, branch_index):
+        branch = self.audio_queue[branch_index]
+        del self.audio_queue[branch_index]
+        del self.branches[str(branch)]
+
+    def delete_leaf(self, leaf_index, branch_index=None):
+        if branch_index is None: #Doesn't need to be in self.branches
+            del self.audio_queue[leaf_index]
+        else:
+            self.audio_queue[branch_index].remove_leaf(leaf_index)
+            if not self.audio_queue[branch_index]:
+                self.delete_branch(branch_index)
 
     def audio_loop(self):
         """Main loop that sends audio samples to the server. Sends the first
@@ -252,34 +280,35 @@ class MumbleJumble:
         while True:
             try:
                 if self.audio_queue:
-                    if isinstance(self.audio_queue[0], handles.Branch):
-                        current_audio_branched = True
+                    try:
                         self.leaf = self.audio_queue[0].leaves[0]
-                    else:
-                        current_audio_branched = False
+                    except:
                         self.leaf = self.audio_queue[0]
                     while self.leaf.current_sample <= self.leaf.total_samples:
                         while self.paused:
                             time.sleep(0.1)
                         while self.client.sound_output.get_buffer_size() > 0.5:
                             time.sleep(0.1)
-                        if not self.skipFlag:
+                        if not self.skipLeaf:
                             self.client.sound_output.add_sound(audioop.mul(
                                             self.leaf.samples[self.leaf.current_sample],
                                             2, self.volume))
                             self.leaf.current_sample += 1
-                        elif self.skipFlag:
-                            self.skipFlag = False
+                        elif self.skipLeaf:
+                            self.skipLeaf = False
                             break
                     try:
                         # Removes the first song from the queue
                         # Will fail if clear command is passed, not a problem though
-                        if current_audio_branched:
-                            self.audio_queue[0].remove_leaf(0)
-                            if not self.audio_queue[0].leaves:
-                                del self.audio_queue[0]
+                        if self.leaf.branch is not None:
+                            if self.skipBranch: 
+                                self.delete_branch(0)
+                                self.skipBranch = False
+                            else:
+                                self.delete_leaf(0, 0)
+
                         else:
-                            del self.audio_queue[0]
+                            self.delete_leaf(0)
                     except:
                         pass
                     finally:
@@ -294,11 +323,11 @@ class MumbleJumble:
 
 
 class ffmpegThread(threading.Thread):
-    """Tuple (audio_file, audio_type, audio_title)"""
     def __init__(self, parent):
         threading.Thread.__init__(self)
         self.audio2process = []
         self.parent = parent
+        self.daemon = True
 
 
     def run(self):
@@ -309,21 +338,11 @@ class ffmpegThread(threading.Thread):
                 try:
                     leaf = self.process(leaf, self.audio2process[0][3])
                     if branchname is None:
-                        self.parent.audio_queue.append(leaf)
-                        del self.audio2process[0]
+                        branch = None
                     else:
-                        if self.parent.audio_queue:
-                            for i, x in enumerate(self.parent.audio_queue):
-                                if str(x) == branchname:
-                                    self.parent.audio_queue[i].add(leaf)
-                                    break
-                                elif x == self.parent.audio_queue[-1]:
-                                    self.parent.audio_queue.append(handles.Branch(branchname, leaf))
-                                    break
-                        else:
-                            self.parent.audio_queue.append(handles.Branch(branchname, leaf))
-
-                        del self.audio2process[0]
+                        branch = handles.Branch(branchname, leaf)
+                    self.parent.append_leaf(leaf, branch)
+                    del self.audio2process[0]
                 except Exception as e:
                     print(e)
                     print('Cannot process audio file, aborting!')
@@ -352,7 +371,7 @@ class ffmpegThread(threading.Thread):
         with io.BytesIO(stdout) as out:
             while True:
                 leaf.samples[counter] = out.read(88200)
-                if not leaf.samples[counter]:
+                if not leaf.samples[counter]:   #If last fragment is empty
                     leaf.total_samples = counter
                     return leaf
                 counter += 1
@@ -362,15 +381,16 @@ class LoopThread(threading.Thread):
     def __init__(self, parent):
         threading.Thread.__init__(self)
         self.parent = parent
-        self.counter = 0
+        self.daemon = True
 
     def run(self):
+        counter = 0
         while True:
             time.sleep(1)
-            self.counter += 1 
+            counter += 1 
             for module in self.parent.registered_modules:
                 if hasattr(module, 'loop') and hasattr(module.loop, 'time'):
-                    if self.counter % module.loop.time == 0:
+                    if counter % module.loop.time == 0:
                         module.loop(self.parent)
 
 

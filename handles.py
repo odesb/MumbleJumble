@@ -1,5 +1,5 @@
 class Leaf:
-    """Represents a complete audio file sent to the server by MumbleJumble"""
+    """Represents an audio file sent to the server by MumbleJumble"""
     def __init__(self, audio_file, audio_title):
         self.file = audio_file
         self.title = audio_title
@@ -7,28 +7,34 @@ class Leaf:
         self.total_samples = None
         self.samples = {}
         self.current_sample = 1
+        self.branch = None
 
-    def get_sample_len(self):
+    def __str__(self):
+        return self.title
+
+
+    def get_sample_length(self):
         """Get length of sample in seconds"""
         return duration2sec(self.duration) / float(self.total_samples)
 
-    def printable_queue_format(self):
-        return (self.title, '{0}/{1} ({2}%)'.format(self.get_current_time()[:-3],
-                                                    self.duration[:-4],
-                                                    int(self.current_song_status())))
 
-
-    def get_current_time(self):
+    def get_time_elapsed(self):
         """Associated with the queue command"""
-        current_sec = self.current_sample * self.get_sample_len()
+        current_sec = self.current_sample * self.get_sample_length()
         return sec2duration(current_sec)
-    
+ 
 
-    def current_song_status(self):
+    def get_percent_elapsed(self):
         """Returns the completion of the song in %. Associated with the queue
         command.
         """
         return float(self.current_sample) / float(self.total_samples) * 100
+
+
+    def leaf_status(self):
+        return '{0}/{1} ({2}%)'.format(self.get_time_elapsed()[:-3],
+                                       self.duration[:-4],
+                                       int(self.get_percent_elapsed()))
 
 
     def seek(self, seconds):
@@ -38,10 +44,22 @@ class Leaf:
 class Branch:
     def __init__(self, title, initleaf):
         self.title = title
+        initleaf.branch = self
         self.leaves = [initleaf]
        
     def __str__(self):
         return self.title
+
+    def __iter__(self):
+        for leaf in self.leaves:
+            yield leaf
+
+    def __len__(self):
+        return len(self.leaves)
+
+    def __contains__(self, leaf):
+        if leaf in self.leaves:
+            return True
 
     def add(self, leaf):
         self.leaves.append(leaf)
@@ -49,6 +67,7 @@ class Branch:
     def remove_leaf(self, index):
         del self.leaves[index]
 
+    __repr__ = __str__
 
 
 def duration2sec(duration):
@@ -66,5 +85,3 @@ def sec2duration(seconds):
     seconds = str(int(rem % 60)).zfill(2)
     milli = str(float(rem % 60 / 10))[1:4]
     return '{0}:{1}:{2}{3}'.format(hours, minutes, seconds, milli)
-
-

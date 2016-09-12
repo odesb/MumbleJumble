@@ -8,8 +8,9 @@
 		"reconnect":false,
 		"debug":false
 	},
-	"youtube":{
-		"download_folder":""
+	"youtube-dl":{
+		"download_playlist":false,
+		"download_folder":"/home/olivier/test/"
 	},
 	"localplay":{
 		"local_folder":""

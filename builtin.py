@@ -14,25 +14,34 @@ def skip(bot, command, arguments):
             select = int(arguments.split(';', 1)[0])
             leaf = int(arguments.split(';', 1)[1])
             if select == 1 and leaf == 1:
-                bot.skipFlag = True
+                bot.skipLeaf = True
                 return
+            leaf -= 1 # Since leaf is an index
         except IndexError:
             leaf = None
             if select == 1:
-                bot.skipFlag = True
+                bot.skipLeaf = True
+                if bot.leaf.branch is not None:
+                    bot.skipBranch = True
                 return
         except ValueError:
-            bot.send_msg_current_channel('Not a valid value!')
+            bot.send_msg_current_channel('Invalid value!')
             return
         try:
-            if isinstance(bot.audio_queue[select - 1], handles.Branch) and leaf is not None:
-               bot.audio_queue[select - 1].remove_leaf(leaf - 1)
+            select -= 1 # Since select is an index
+            if isinstance(bot.audio_queue[select], handles.Branch):
+                if leaf is not None:
+                    bot.delete_leaf(leaf, select)
+                else:
+                    bot.delete_branch(select)
             else:
-                del bot.audio_queue[select - 1]
+                bot.delete_leaf(select)
         except IndexError:
-            bot.send_msg_current_channel('Not a valid value!')
+            bot.send_msg_current_channel('Invalid index')
     else:
-        bot.skipFlag = True
+        bot.skipLeaf = True
+        if bot.leaf.branch is not None:
+            bot.skipBranch = True
 
 
 def chg_vol(bot, command, arguments):
@@ -47,39 +56,39 @@ def chg_vol(bot, command, arguments):
 
 
 def clear_queue(bot, command, arguments):
-    bot.skipFlag = True
+    bot.skipLeaf = True
     bot.audio_queue = []
 
 
 def print_queue(bot, command, arguments):
     """Creates a printable queue suited for the Mumble chat. Associated with
     the queue command. Checks the processing and processed song lists of the
-    subthread. Possible states: Paused, Playing, Ready, Downloading.
+    subthread. Possible states: Paused, Playing, Ready.
     """
     if not bot.audio_queue:
         queue = 'Queue is empty'
     else:
         queue = ''
-        for i in range(len(bot.audio_queue)):
-            if isinstance(bot.audio_queue[i], handles.Branch):
-                queue += '<br />' + str(bot.audio_queue[i])
-                for j in range(len(bot.audio_queue[i].leaves)):
-                    title = bot.audio_queue[i].leaves[j].printable_queue_format()[0]
-                    status = bot.audio_queue[i].leaves[j].printable_queue_format()[1]
+        for i, x in enumerate(bot.audio_queue):
+            if isinstance(x, handles.Branch):
+                queue += '<br />' + str(x)
+                for j, y in enumerate(x):
+                    title = str(y)
+                    status = y.leaf_status()
                     if i == 0 and j == 0:
                         if bot.paused:
                             queue += '<br />|---- {0}<b> - Paused - {1}</b>'.format(title, status)
-                        elif not bot.paused:
+                        else:
                             queue += '<br />|---- {0}<b> - Playing - {1}</b>'.format(title, status)
                     else:
                         queue += '<br />|---- {0}<b> - Ready - {1}</b>'.format(title, status[9:17])
             else:
-                title = bot.audio_queue[i].printable_queue_format()[0]
-                status = bot.audio_queue[i].printable_queue_format()[1]
+                title = str(x)
+                status = x.leaf_status()
                 if i == 0:
                     if bot.paused:
                         queue += '<br />{0}<b> - Paused - {1}</b>'.format(title, status)
-                    elif not bot.paused:
+                    else:
                         queue += '<br />{0}<b> - Playing - {1}</b>'.format(title, status)
                 else:
                     queue += '<br />{0}<b> - Ready - {1}</b>'.format(title, status[9:17])
