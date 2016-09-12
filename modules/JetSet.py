@@ -16,7 +16,8 @@ def call(bot, command, arguments):
     if register.JetSetRadio.isAlive():
         pass
     else:
-        register.JetSetRadio.run()
+        bot.send_msg_current_channel('Starting the Jet Set Radio Live stream')
+        register.JetSetRadio.start()
         
 
 class JetSetRadioPlayer(threading.Thread):
@@ -24,6 +25,7 @@ class JetSetRadioPlayer(threading.Thread):
         threading.Thread.__init__(self)
         self.parent = parent
         self.reloadcount = self.parent.reload_count
+        self.daemon = True
         self.exit = False
 
         jetsetlist =  urllib2.urlopen(MP3LIST)
@@ -34,15 +36,14 @@ class JetSetRadioPlayer(threading.Thread):
         del self.mp3_list[-1]
 
     def run(self):
-        if self.parent.startStream == True:
-            self.exit = True
+        self.play_song()
         while self.reloadcount == self.parent.reload_count and not self.exit:
-            self.parent.startStream = True 
-            if len(self.parent.audio_queue) == 0:
-                song = random.choice(self.mp3_list)
-                f = urllib2.urlopen('http://jetsetradio.live/audioplayer/audio/{0}.mp3'.format(song.replace(' ', '%20')))
-                fragment = f.read(88200 * 10)
-                while len(fragment) > 0:
-                    self.parent.append_audio(fragment, 'stream', song)
-                    fragment = f.read(88200 * 10)
-            time.sleep(1)
+            if len(self.parent.audio_queue) > 0 and isinstance(self.parent.audio_queue[0], list):
+                if self.parent.audio_queue[0][0] == 'Jet Set Radio Live <b>- STREAM</b>' and len(self.parent.audio_queue[0]) < 3:
+                    self.play_song()
+            time.sleep(15)
+
+    def play_song(self):
+        song_title = random.choice(self.mp3_list)
+        f = urllib2.urlopen('http://jetsetradio.live/audioplayer/audio/{0}.mp3'.format(song_title.replace(' ', '%20')))
+        self.parent.append_audio(f.read(), song_title, 'Jet Set Radio Live <b>- STREAM</b>', pipe=True)

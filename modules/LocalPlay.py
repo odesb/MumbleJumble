@@ -68,7 +68,7 @@ def play_music(bot, arguments):
             else:
                 audio_file = whole_l[start:end].split(' ', 1)[1]
             bot.send_msg_current_channel('Adding <b>{0}</b> to the queue'.format(audio_file))
-            bot.append_audio(os.path.join(register.localplayer.root[0], register.localplayer.working_dir, audio_file), 'complete', audio_file)
+            bot.append_audio(os.path.join(register.localplayer.root[0], register.localplayer.working_dir, audio_file), audio_file)
         except:
             pass
 

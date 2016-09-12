@@ -4,7 +4,5 @@
 - Configuration file
 - Better seek format
 - Multiple commands with ;!
-- Drop pafy support?
-- Find out a way to make random loops (probabilities)
 - Song titles with Tag Editor
-- Fix pafy failing
+!ss

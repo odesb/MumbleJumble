@@ -2,16 +2,16 @@
 	"bot":{
 		"server":"",
 		"port":64738,
-		"user":["@MumbleJumble", "@BUMBLEBEE", "@JIJMAESTER", "@NSAOFFICER"],
+		"user":["@MumbleJumble"],
 		"password":"",
 		"certfile":null,
 		"reconnect":false,
 		"debug":false
 	},
 	"youtube":{
-		"download_folder":"/home/olivier/Projects/MumbleJumble/.song_library"
+		"download_folder":""
 	},
 	"localplay":{
-		"local_folder":"/home/olivier/Projects/MumbleJumble/.song_library"
+		"local_folder":""
 	}
 }
