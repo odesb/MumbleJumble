@@ -9,36 +9,29 @@ class Leaf:
         self.current_sample = 1
         self.branch = None
 
-    def __str__(self):
-        return self.title
-
 
     def get_sample_length(self):
         """Get length of sample in seconds"""
         return duration2sec(self.duration) / float(self.total_samples)
-
 
     def get_time_elapsed(self):
         """Associated with the queue command"""
         current_sec = self.current_sample * self.get_sample_length()
         return sec2duration(current_sec)
  
-
     def get_percent_elapsed(self):
         """Returns the completion of the song in %. Associated with the queue
         command.
         """
         return float(self.current_sample) / float(self.total_samples) * 100
 
-
     def leaf_status(self):
         return '{0}/{1} ({2}%)'.format(self.get_time_elapsed()[:-3],
                                        self.duration[:-4],
                                        int(self.get_percent_elapsed()))
 
-
     def seek(self, seconds):
-        self.current_sample = int(seconds / self.get_sample_len()) + 1
+        self.current_sample = int(seconds / self.get_sample_length()) + 1
 
 
 class Branch:
@@ -47,9 +40,6 @@ class Branch:
         initleaf.branch = self
         self.leaves = [initleaf]
        
-    def __str__(self):
-        return self.title
-
     def __iter__(self):
         for leaf in self.leaves:
             yield leaf
@@ -61,13 +51,12 @@ class Branch:
         if leaf in self.leaves:
             return True
 
-    def add(self, leaf):
+    def append(self, leaf):
         self.leaves.append(leaf)
 
     def remove_leaf(self, index):
         del self.leaves[index]
 
-    __repr__ = __str__
 
 
 def duration2sec(duration):

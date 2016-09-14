@@ -1,3 +1,4 @@
 - Add either some caching support or dl_folder user set size limit
 - Quiet mode
 - Song titles with Tag Editor
+- Better way to check usernames/# of scripts

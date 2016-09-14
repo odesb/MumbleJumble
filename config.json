@@ -9,8 +9,15 @@
 		"debug":false
 	},
 	"youtube-dl":{
-		"download_playlist":false,
-		"download_folder":"/home/olivier/test/"
+		"single":{
+			"download":false,
+			"download_folder":""
+		},
+		"playlist":{
+			"download":false,
+			"download_folder":"",
+			"buffer_size":3
+		}
 	},
 	"localplay":{
 		"local_folder":""

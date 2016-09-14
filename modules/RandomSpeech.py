@@ -5,7 +5,7 @@ SPEECH = ["I hate everyone",
 "How can mirrors be real",
 "Why are you listening to a bot",
 "That was really disgusting of you",
-"What about.......", 
+"What about.......",
 "Sir",
 "Esir", 
 "Wow.......", 
@@ -25,7 +25,7 @@ register.commands = None
 register.enabled = True
 
 
-def call(bot, command_used, arguments):
+def call(bot, command, arguments):
     pass
 
 
@@ -34,5 +34,5 @@ def loop(bot):
     if 0 <= trigger <= loop.chance:
         bot.send_msg_current_channel(random.choice(SPEECH))
 
-loop.time = 30
-loop.chance = 3 #3% chance to trigger the speech
+loop.time = 60
+loop.chance = 3  #3% chance to trigger the speech

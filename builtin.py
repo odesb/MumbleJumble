@@ -1,3 +1,5 @@
+from __future__ import unicode_literals
+
 import handles
 
 
@@ -5,7 +7,6 @@ def reload_modules(bot, command, arguments):
     bot.reload_count += 1
     loaded_count = bot.load_modules()
     bot.send_msg_current_channel('Reloaded <b>{0}</b> bot modules'.format(loaded_count))
-
 
 
 def skip(bot, command, arguments):
@@ -16,31 +17,31 @@ def skip(bot, command, arguments):
             if select == 1 and leaf == 1:
                 bot.skipLeaf = True
                 return
-            leaf -= 1 # Since leaf is an index
+            leaf -= 1  # Since leaf is an index
         except IndexError:
             leaf = None
             if select == 1:
                 bot.skipLeaf = True
-                if bot.leaf.branch is not None:
+                if hasattr(bot.leaf, 'branch') and bot.leaf.branch is not None:
                     bot.skipBranch = True
                 return
         except ValueError:
             bot.send_msg_current_channel('Invalid value!')
             return
         try:
-            select -= 1 # Since select is an index
-            if isinstance(bot.audio_queue[select], handles.Branch):
+            select -= 1  # Since select is an index
+            if isinstance(bot.queue.audio[select], handles.Branch):
                 if leaf is not None:
-                    bot.delete_leaf(leaf, select)
+                    bot.queue.delete_leaf(leaf, select)
                 else:
-                    bot.delete_branch(select)
+                    bot.queue.delete_branch(select)
             else:
-                bot.delete_leaf(select)
+                bot.queue.delete_leaf(select)
         except IndexError:
             bot.send_msg_current_channel('Invalid index')
     else:
         bot.skipLeaf = True
-        if bot.leaf.branch is not None:
+        if hasattr(bot.leaf, 'branch') and bot.leaf.branch is not None:
             bot.skipBranch = True
 
 
@@ -57,7 +58,7 @@ def chg_vol(bot, command, arguments):
 
 def clear_queue(bot, command, arguments):
     bot.skipLeaf = True
-    bot.audio_queue = []
+    bot.queue.clear()
 
 
 def print_queue(bot, command, arguments):
@@ -65,33 +66,42 @@ def print_queue(bot, command, arguments):
     the queue command. Checks the processing and processed song lists of the
     subthread. Possible states: Paused, Playing, Ready.
     """
-    if not bot.audio_queue:
+    if not bot.queue.audio and not bot.queue.ffmpeg:
         queue = 'Queue is empty'
     else:
         queue = ''
-        for i, x in enumerate(bot.audio_queue):
-            if isinstance(x, handles.Branch):
-                queue += '<br />' + str(x)
-                for j, y in enumerate(x):
-                    title = str(y)
-                    status = y.leaf_status()
-                    if i == 0 and j == 0:
-                        if bot.paused:
-                            queue += '<br />|---- {0}<b> - Paused - {1}</b>'.format(title, status)
+        if bot.queue.audio:
+            for i, x in enumerate(bot.queue.audio):
+                if isinstance(x, handles.Branch):
+                    queue += '<br />' + x.title
+                    for j, y in enumerate(x):
+                        title = y.title
+                        status = y.leaf_status()
+                        if i == 0 and j == 0:
+                            if bot.paused:
+                                queue += '<br />|---- {0}<b> - Paused - {1}</b>'.format(title, status)
+                            else:
+                                queue += '<br />|---- {0}<b> - Playing - {1}</b>'.format(title, status)
                         else:
-                            queue += '<br />|---- {0}<b> - Playing - {1}</b>'.format(title, status)
-                    else:
-                        queue += '<br />|---- {0}<b> - Ready - {1}</b>'.format(title, status[9:17])
-            else:
-                title = str(x)
-                status = x.leaf_status()
-                if i == 0:
-                    if bot.paused:
-                        queue += '<br />{0}<b> - Paused - {1}</b>'.format(title, status)
-                    else:
-                        queue += '<br />{0}<b> - Playing - {1}</b>'.format(title, status)
+                            queue += '<br />|---- {0}<b> - Ready - {1}</b>'.format(title, status[9:17])
                 else:
-                    queue += '<br />{0}<b> - Ready - {1}</b>'.format(title, status[9:17])
+                    title = x.title
+                    status = x.leaf_status()
+                    if i == 0:
+                        if bot.paused:
+                            queue += '<br />{0}<b> - Paused - {1}</b>'.format(title, status)
+                        else:
+                            queue += '<br />{0}<b> - Playing - {1}</b>'.format(title, status)
+                    else:
+                        queue += '<br />{0}<b> - Ready - {1}</b>'.format(title, status[9:17])
+
+        if bot.queue.ffmpeg:
+            for z in bot.queue.ffmpeg:
+                queue += '<br />{0}<b> - Processing</b>'.format(z[1])
+
+        for module in bot.registered_modules:
+            if hasattr(module, 'queue_append'):
+                queue += module.queue_append()
 
     bot.send_msg_current_channel(queue)
 
@@ -108,10 +118,11 @@ def seek(bot, command, arguments):
     mod_arg = arguments.replace(':', '').zfill(6)
     new_time = '{0}:{1}:{2}.00'.format(mod_arg[0:2], mod_arg[2:4], mod_arg[4:6])
     try:
-        seconds = duration2sec(new_time)
-        if 0 <= seconds <= duration2sec(bot.leaf):
-            bot.leaf.seek(seconds)
-        else:
-            bot.send_msg_current_channel('Cannot seek to specified value.')
-    except:
+        seconds = handles.duration2sec(new_time)
+    except ValueError:
+        bot.send_msg_current_channel('Invalid time')
+        return
+    if 0 <= seconds <= handles.duration2sec(bot.leaf.duration):
+        bot.leaf.seek(seconds)
+    else:
         bot.send_msg_current_channel('Cannot seek to specified value.')
