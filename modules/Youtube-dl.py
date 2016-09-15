@@ -95,17 +95,23 @@ class SingleThread(threading.Thread):
             del self.new_audio[0]
 
     def dl_and_append(self, url, file_path, title, branchname=None):
-        ydl_opts = {'format': 'bestaudio', 'outtmpl': file_path}
-        with youtube_dl.YoutubeDL(ydl_opts) as ydl:
-            ydl.download([url])
-        self.parent.append_audio(file_path, title, branchname)
+        try:
+            ydl_opts = {'format': 'bestaudio', 'outtmpl': file_path}
+            with youtube_dl.YoutubeDL(ydl_opts) as ydl:
+                ydl.download([url])
+            self.parent.append_audio(file_path, title, branchname)
+        except youtube_dl.DownloadError:
+            pass
 
     def pipe_and_append(self, url, title, branchname=None):
-        command = ['youtube-dl', url, '-f', 'bestaudio', '-o', '-']
-        p = sp.Popen(command, stdout=sp.PIPE, stderr=sp.PIPE)
-        stdout, stderr = p.communicate()
-        print(stderr)
-        self.parent.append_audio(stdout, title, branchname, pipe=True)
+        try:
+            command = ['youtube-dl', url, '-f', 'bestaudio', '-o', '-']
+            p = sp.Popen(command, stdout=sp.PIPE, stderr=sp.PIPE)
+            stdout, stderr = p.communicate()
+            print(stderr)
+            self.parent.append_audio(stdout, title, branchname, pipe=True)
+        except youtube_dl.DownloadError:
+            pass
 
 
 class PlaylistThread(SingleThread):
