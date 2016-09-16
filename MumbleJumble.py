@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+#!/usr/bin/env python2
 from __future__ import print_function
 
 import subprocess as sp
@@ -22,16 +22,7 @@ import pymumble
 PIDFILE = '/tmp/mj.pid'
 
 def get_arg_value(arg):
-    """Retrieves the values associated to command line arguments
-    Possible arguments:
-    --server    Mumble server address
-    --port      Mumble server port
-    --user      Mumble bot's username
-    --password  Mumble server password
-    --certfile  Mumble certification
-    --reconnect Bot reconnects to the server if disconnected
-    --debug     Debug=True will generate a lot of stdout messages
-    """
+    """Retrieves the values associated to command line arguments"""
     if arg in sys.argv[1:]:
         try:
             return sys.argv[1:][sys.argv[1:].index(arg) + 1]
