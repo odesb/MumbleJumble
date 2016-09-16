@@ -3,6 +3,7 @@ from __future__ import print_function
 
 import subprocess as sp
 import io
+import getopt
 import os
 import imp
 import sys
@@ -20,22 +21,6 @@ sys.path.append(os.path.join(SCRIPTPATH, 'pymumble'))
 import pymumble
 
 PIDFILE = '/tmp/mj.pid'
-
-def get_arg_value(arg):
-    """Retrieves the values associated to command line arguments"""
-    if arg in sys.argv[1:]:
-        try:
-            return sys.argv[1:][sys.argv[1:].index(arg) + 1]
-        except IndexError:
-            sys.exit('Value of parameter ' + arg + ' is missing!')
-
-
-def arg_in_arglist(arg, args_list):
-    if arg in args_list:
-        return True
-    else:
-        return False
-
 
 def num_scripts():
     if os.path.isfile(PIDFILE):
@@ -73,29 +58,33 @@ class MumbleJumble:
             self.config = json.load(json_config_file)
 
         pymumble_parameters = {}
-        arglist = ['--server', '--port', '--user', '--password', '--certfile', 
-                   '--reconnect', '--debug']
+        arglist = ['server=', 'port=', 'user=', 'password=', 'certfile=', 
+                   'reconnect=', 'debug=']
+
+        self.config_username = False
+
+        try:
+            opt, arg = getopt.getopt(sys.argv[1:], '', arglist)
+            for arg_value in opt:
+                pymumble_parameters[arg_value[0][2:]] = arg_value[1]
+        except getopt.GetoptError:
+            sys.exit('usage: MumbleJumble.py --argument1 <value> --argument2 <value>')
 
         for arg in arglist:
-            if arg == '--user':
-                try:
-                    pymumble_parameters[arg[2:]] = self.config['bot'][arg[2:]][num_scripts()]
-                except IndexError:
-                    if arg in sys.argv[1:]:
-                        pymumble_parameters[arg[2:]] = get_arg_value(arg)
-                    else:
-                        sys.exit('Usernames already taken')
-            else:
-                pymumble_parameters[arg[2:]] = self.config['bot'][arg[2:]]
-            if arg_in_arglist(arg, sys.argv[1:]):
-                pymumble_parameters[arg[2:]] = get_arg_value(arg)
-            if arg == '--server':
-                if pymumble_parameters['server'] == "":
-                    sys.exit('Server address is missing!')
+            arg = arg[:-1]
+            if arg not in pymumble_parameters:
+                if arg == 'user':
+                    try:
+                        pymumble_parameters[arg] = self.config['bot'][arg][num_scripts()]
+                        writepid()
+                        self.config_username = True
+                    except IndexError:
+                        print('Usernames already taken by other MumbleJumble scripts')
+                        sys.exit('If you think this is an error, try deleting {0} and restarting all MumbleJumble instances'.format(PIDFILE))
+                else:
+                    pymumble_parameters[arg] = self.config['bot'][arg]
 
-        writepid()
-
-        self.client = pymumble.Mumble(host=pymumble_parameters['server'], 
+        self.client = pymumble.Mumble(host=pymumble_parameters['server'],
                                       port=int(pymumble_parameters['port']),
                                       user=pymumble_parameters['user'], 
                                       password=pymumble_parameters['password'],
@@ -111,7 +100,10 @@ class MumbleJumble:
 
         self.client.start() # Start the mumble thread
 
-        self.volume = 1.00
+        try:
+            self.volume = float(self.config['bot']['volume'])
+        except (KeyError, ValueError):
+            self.volume = 1.00
         self.paused = False
         self.skipLeaf = False
         self.skipBranch = False
@@ -283,7 +275,8 @@ class MumbleJumble:
             except Exception as e:
                 print(e)
             except KeyboardInterrupt:
-                deletepid()
+                if self.config_username:
+                    deletepid()
                 sys.exit('Exiting!')
 
 

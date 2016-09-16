@@ -1,3 +1,4 @@
+from __future__ import unicode_literals
 import os
 import re
 import random
@@ -88,7 +89,7 @@ class LocalPlayer:
         dir_l = []
         for element in l:
             if os.path.isdir(os.path.join(os.path.abspath(path), element)):
-                dir_l.append(element.encode('ascii', 'ignore'))
+                dir_l.append(element)
         return dir_l
 
 
@@ -98,11 +99,11 @@ class LocalPlayer:
         self.file_l = []
         for element in l:
             if os.path.isdir(os.path.join(self.working_path(), element)):
-                self.dir_l.append(element.encode('ascii', 'ignore'))
+                self.dir_l.append(element)
             else:
-                self.file_l.append(element.encode('ascii', 'ignore'))
-        dir_l_sorted = sorted(self.dir_l, key=str.lower)
-        file_l_sorted = sorted(self.file_l, key=str.lower)
+                self.file_l.append(element)
+        dir_l_sorted = sorted(self.dir_l, key=unicode.lower)
+        file_l_sorted = sorted(self.file_l, key=unicode.lower)
         l = dir_l_sorted + file_l_sorted
         
         clean_l = []
@@ -113,12 +114,12 @@ class LocalPlayer:
         counter = 1
         for i in range(len(l)):
             j = i / 20
-            if os.path.islink(os.path.join(self.working_path(), l[i].decode('ascii'))):
-                clean_l[j] += '<br /><b><font color=#5fa5e0>{0}</font></b>'.format(l[i].decode('ascii'))
-            elif os.path.isdir(os.path.join(self.working_path(), l[i].decode('ascii'))):
-                clean_l[j] += '<br /><b>{0}</b>'.format(l[i].decode('ascii'))
+            if os.path.islink(os.path.join(self.working_path(), l[i])):
+                clean_l[j] += '<br /><b><font color=#5fa5e0>{0}</font></b>'.format(l[i])
+            elif os.path.isdir(os.path.join(self.working_path(), l[i])):
+                clean_l[j] += '<br /><b>{0}</b>'.format(l[i])
             else:
-                clean_l[j] += '<br />{0}. {1}'.format(counter, l[i].decode('ascii'))
+                clean_l[j] += '<br />{0}. {1}'.format(counter, l[i])
                 counter += 1
         return clean_l
 

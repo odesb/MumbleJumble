@@ -6,7 +6,8 @@
 		"password":"",
 		"certfile":null,
 		"reconnect":false,
-		"debug":false
+		"debug":false,
+		"volume":1.00
 	},
 	"youtube-dl":{
 		"single":{
