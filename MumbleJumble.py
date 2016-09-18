@@ -22,6 +22,7 @@ import pymumble
 
 PIDFILE = '/tmp/mj.pid'
 
+
 def num_scripts():
     if os.path.isfile(PIDFILE):
         with open(PIDFILE) as f:
@@ -293,13 +294,17 @@ class FfmpegThread(threading.Thread):
                 # A queue element is (file, title, branch name, pipe)
                 leaf = handles.Leaf(self.parent.queue.ffmpeg[0][0], self.parent.queue.ffmpeg[0][1])
                 branchname = self.parent.queue.ffmpeg[0][2]
-                self.process(leaf, self.parent.queue.ffmpeg[0][3])
-                if branchname is None:
-                    self.parent.queue.append_leaf(leaf)
-                else:
-                    branch = handles.Branch(branchname, leaf)
-                    self.parent.queue.append_leaf(leaf, branch)
-                self.parent.queue.remove_audio()
+                try:
+                    self.process(leaf, self.parent.queue.ffmpeg[0][3])
+                    if branchname is None:
+                        self.parent.queue.append_leaf(leaf)
+                    else:
+                        branch = handles.Branch(branchname, leaf)
+                        self.parent.queue.append_leaf(leaf, branch)
+                    self.parent.queue.remove_audio()
+                except Exception as e:
+                    print(e)
+                    self.parent.queue.remove_audio()
             else:
                 time.sleep(0.5)
 
