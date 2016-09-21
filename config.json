@@ -1,13 +1,14 @@
 {
 	"bot":{
-		"server":"diet.us.to",
+		"server":"",
 		"port":64738,
 		"user":["@MumbleJumble"],
 		"password":"",
 		"certfile":null,
 		"reconnect":false,
 		"debug":false,
-		"volume":1.00
+		"volume":1.00,
+		"quiet":false
 	},
 	"youtube-dl":{
 		"single":{

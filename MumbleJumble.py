@@ -60,7 +60,7 @@ class MumbleJumble:
 
         pymumble_parameters = {}
         arglist = ['server=', 'port=', 'user=', 'password=', 'certfile=', 
-                   'reconnect=', 'debug=']
+                   'reconnect=', 'debug=', 'quiet=']
 
         self.config_username = False
 
@@ -107,6 +107,8 @@ class MumbleJumble:
             self.volume = float(self.config['bot']['volume'])
         except (KeyError, ValueError):
             self.volume = 1.00
+        self.quiet = pymumble_parameters['quiet']  # Is in this dict since it is a cmd line arg
+                                                    # Will change it if there are more cmd line args in the future
         self.paused = False
         self.skipLeaf = False
         self.skipBranch = False
@@ -214,7 +216,8 @@ class MumbleJumble:
     
     def send_msg_current_channel(self, msg):
         """Send a message in the client's current channel"""
-        self.get_current_channel().send_text_message(msg)
+        if not self.quiet:
+            self.get_current_channel().send_text_message(msg)
 
     def command_received(self, text):
         """Main function that reads commands in chat and outputs accordingly
