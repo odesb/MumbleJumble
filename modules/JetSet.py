@@ -13,6 +13,7 @@ MP3LISTS = {'default': 'http://jetsetradio.live/audioplayer/audio/~list.js',
             'immortals': 'http://jetsetradio.live/audioplayer/audio/immortals/~list.js',
             'goldenrhinos': 'http://jetsetradio.live/audioplayer/audio/goldenrhinos/~list.js'}
 
+
 def register(bot):
     register.JetSetRadio = JetSetRadioPlayer(bot, MP3LISTS['default'])
 
@@ -22,7 +23,9 @@ register.enabled = True
 
 def call(bot, command, arguments):
     if arguments == '':
-        bot.send_msg_current_channel('You must specify the radio station: {}'.format(MP3LISTS.keys()))
+        for station in MP3LISTS.keys():
+            arguments += '<b>{}</b>, '.format(station)
+        bot.send_msg_current_channel('You must specify the radio station: {}'.format(arguments))
     elif register.JetSetRadio.isAlive():
         pass
     else:
@@ -35,22 +38,14 @@ def call(bot, command, arguments):
         
 
 class JetSetRadioPlayer(threading.Thread):
-    def __init__(self, parent, station_list):
+    def __init__(self, parent, station_url):
         threading.Thread.__init__(self)
         self.parent = parent
+        self.station_url = station_url
         self.reloadcount = self.parent.reload_count
         self.daemon = True
-        self.station_list = station_list
+        self.mp3list = retrieve_mp3list(station_url)
         self.branchname = 'Jet Set Radio Live <b>- STREAM</b>'
-
-        jetsetlist = urllib2.urlopen(self.station_list)
-        raw_string = jetsetlist.read()
-        raw_string = raw_string.replace('filesListArray[filesListArray.length] = "', '')
-        raw_string.find('length] = "')
-        raw_string = raw_string.replace('\r\n', '')
-        self.mp3_list = raw_string.split('";')
-        del self.mp3_list[-1]
-        print(self.mp3_list)
 
     def run(self):
         while self.reloadcount == self.parent.reload_count:
@@ -65,6 +60,17 @@ class JetSetRadioPlayer(threading.Thread):
                 return
 
     def play_song(self):
-        song_title = random.choice(self.mp3_list)
-        f = urllib2.urlopen('{0}{1}.mp3'.format(self.station_list[:-8], song_title.replace(' ', '%20')))
+        song_title = random.choice(self.mp3list)
+        f = urllib2.urlopen('{0}{1}.mp3'.format(self.station_url[:-8], song_title.replace(' ', '%20')))
         self.parent.append_audio(f.read(), song_title, self.branchname, pipe=True)
+
+
+def retrieve_mp3list(url):
+    l = urllib2.urlopen(url)
+    lines = l.readlines()
+    mp3_list = []
+    for line in lines:
+        start = line.find('= "') + 3
+        end = line.find('";')
+        mp3_list.append(line[start:end])
+    return mp3_list

@@ -81,8 +81,7 @@ class MumbleJumble:
                         self.config_username = True
                     except IndexError:
                         print('Usernames already taken by other MumbleJumble scripts')
-                        sys.exit('''If you think this is an error, try deleting {0} and
-                                 restarting all MumbleJumble instances'''.format(PIDFILE))
+                        sys.exit('''If you think this is an error, try deleting {0} and restarting all MumbleJumble instances'''.format(PIDFILE))
                 else:
                     pymumble_parameters[arg] = self.config['bot'][arg]
 
@@ -407,7 +406,7 @@ class Queues:
         return mirror
 
     def clear(self):
-        #TODO fix cause it keeps failing with current ffmpeg thread
+        # TODO fix cause it keeps failing with current ffmpeg thread
         self.ffmpeg = []
         self.audio = []
 

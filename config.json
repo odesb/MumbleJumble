@@ -1,6 +1,6 @@
 {
 	"bot":{
-		"server":"",
+		"server":"diet.us.to",
 		"port":64738,
 		"user":["@MumbleJumble"],
 		"password":"",
