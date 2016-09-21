@@ -1,3 +1,6 @@
 .image_cache/
 .song_library/
 *.pyc
+modules/Pain*
+modules/RandomSpeech*
+.idea/

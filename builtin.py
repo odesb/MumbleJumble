@@ -66,42 +66,45 @@ def print_queue(bot, command, arguments):
     the queue command. Checks the processing and processed song lists of the
     subthread. Possible states: Paused, Playing, Ready.
     """
-    if not bot.queue.audio and not bot.queue.ffmpeg:
-        queue = 'Queue is empty'
-    else:
-        queue = ''
-        if bot.queue.audio:
-            for i, x in enumerate(bot.queue.audio):
-                if isinstance(x, handles.Branch):
-                    queue += '<br />' + x.title
-                    for j, y in enumerate(x):
-                        title = y.title
-                        status = y.leaf_status()
-                        if i == 0 and j == 0:
-                            if bot.paused:
-                                queue += '<br />|---- {0}<b> - Paused - {1}</b>'.format(title, status)
-                            else:
-                                queue += '<br />|---- {0}<b> - Playing - {1}</b>'.format(title, status)
-                        else:
-                            queue += '<br />|---- {0}<b> - Ready - {1}</b>'.format(title, status[9:17])
-                else:
-                    title = x.title
-                    status = x.leaf_status()
-                    if i == 0:
+    queue = ''
+    if bot.queue.audio:
+        for i, x in enumerate(bot.queue.audio):
+            if isinstance(x, handles.Branch):
+                queue += '<br />' + x.title
+                for j, y in enumerate(x):
+                    title = y.title
+                    status = y.leaf_status()
+                    if i == 0 and j == 0:
                         if bot.paused:
-                            queue += '<br />{0}<b> - Paused - {1}</b>'.format(title, status)
+                            queue += '<br />|---- {0}<b> - Paused - {1}</b>'.format(title, status)
                         else:
-                            queue += '<br />{0}<b> - Playing - {1}</b>'.format(title, status)
+                            queue += '<br />|---- {0}<b> - Playing - {1}</b>'.format(title, status)
                     else:
-                        queue += '<br />{0}<b> - Ready - {1}</b>'.format(title, status[9:17])
+                        queue += '<br />|---- {0}<b> - Ready - {1}</b>'.format(title, status[9:17])
+            else:
+                title = x.title
+                status = x.leaf_status()
+                if i == 0:
+                    if bot.paused:
+                        queue += '<br />{0}<b> - Paused - {1}</b>'.format(title, status)
+                    else:
+                        queue += '<br />{0}<b> - Playing - {1}</b>'.format(title, status)
+                else:
+                    queue += '<br />{0}<b> - Ready - {1}</b>'.format(title, status[9:17])
 
-        if bot.queue.ffmpeg:
-            for z in bot.queue.ffmpeg:
-                queue += '<br />{0}<b> - Processing</b>'.format(z[1])
+    if bot.queue.ffmpeg:
+        for z in bot.queue.ffmpeg:
+            try:
+                queue += '<br />{0}<b> - Processing</b>'.format(z.leaves[0].title)
+            except AttributeError:
+                queue += '<br />{0}<b> - Processing</b>'.format(z.title)
 
-        for module in bot.registered_modules:
-            if hasattr(module, 'queue_append'):
-                queue += module.queue_append()
+    for module in bot.registered_modules:
+        if hasattr(module, 'queue_append'):
+            queue += module.queue_append()
+
+    if queue == '':
+        queue += 'Queue is empty'
 
     bot.send_msg_current_channel(queue)
 

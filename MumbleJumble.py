@@ -81,7 +81,8 @@ class MumbleJumble:
                         self.config_username = True
                     except IndexError:
                         print('Usernames already taken by other MumbleJumble scripts')
-                        sys.exit('If you think this is an error, try deleting {0} and restarting all MumbleJumble instances'.format(PIDFILE))
+                        sys.exit('''If you think this is an error, try deleting {0} and
+                                 restarting all MumbleJumble instances'''.format(PIDFILE))
                 else:
                     pymumble_parameters[arg] = self.config['bot'][arg]
 
@@ -97,9 +98,11 @@ class MumbleJumble:
         self.client.callbacks.set_callback('text_received', self.command_received)
 
         self.queue = Queues()
+        # Shortcuts for API
         self.build_mirror = self.queue.build_mirror
+        self.append_audio = self.queue.append_audio
 
-        self.client.start() # Start the mumble thread
+        self.client.start()  # Start the mumble thread
 
         try:
             self.volume = float(self.config['bot']['volume'])
@@ -110,9 +113,9 @@ class MumbleJumble:
         self.skipBranch = False
         self.leaf = None
         self.reload_count = 0
-        self.client.is_ready() # Wait for the connection
+        self.client.is_ready()  # Wait for the connection
         self.client.set_bandwidth(200000)
-        self.client.users.myself.unmute() # Be sure the client is not muted
+        self.client.users.myself.unmute()  # Be sure the client is not muted
         with open(os.path.join(SCRIPTPATH, 'comment')) as comment:
             self.client.users.myself.comment(comment.read())
 
@@ -124,25 +127,25 @@ class MumbleJumble:
         self.loopthread = LoopThread(self)
         self.loopthread.start()
 
-        self.audio_loop() # Loops the main thread
+        self.audio_loop()  # Loops the main thread
 
     def load_modules(self):
         print('\nLoading bot modules')
-        self.registered_commands = {'c' :clear_queue,
-                                    'clear' :clear_queue,
-                                    'p' :toggle_pause,
-                                    'pause' :toggle_pause,
-                                    'q' :print_queue,
-                                    'queue' :print_queue,
-                                    'r' :reload_modules,
-                                    'reload' :reload_modules,
-                                    's' :skip,
-                                    'seek' :seek,
-                                    'skip' :skip,
-                                    'v' :chg_vol,
-                                    'vol' :chg_vol,
-                                    'volume' :chg_vol}
-        self.registered_modules = [] # List of module objects
+        self.registered_commands = {'c': clear_queue,
+                                    'clear': clear_queue,
+                                    'p': toggle_pause,
+                                    'pause': toggle_pause,
+                                    'q': print_queue,
+                                    'queue': print_queue,
+                                    'r': reload_modules,
+                                    'reload': reload_modules,
+                                    's': skip,
+                                    'seek': seek,
+                                    'skip': skip,
+                                    'v': chg_vol,
+                                    'vol': chg_vol,
+                                    'volume': chg_vol}
+        self.registered_modules = []  # List of module objects
 
         # Lists modules
         filenames = []
@@ -154,7 +157,8 @@ class MumbleJumble:
         modules = []
         for filename in filenames:
             name = os.path.basename(filename)[:-3]
-            try: module = imp.load_source(name, filename)
+            try:
+                module = imp.load_source(name, filename)
             except Exception as e:
                 print('Could not load module ' + name)
                 print('  ' + str(e))
@@ -175,9 +179,11 @@ class MumbleJumble:
 
                     l = ['call', 'loop', 'queue_append']
                     for attr in l:
-                        if hasattr(module, attr):
+                        try:
                             value = getattr(module, attr)
                             setattr(module_object, attr, value)
+                        except AttributeError:
+                            continue
 
                     self.registered_modules.append(module_object)
 
@@ -192,13 +198,13 @@ class MumbleJumble:
                         print("  No commands registered for module '{0}'".format(module.__name__))
 
                 else:
-                    print("Could not register '{0}', for it is missing the 'register' function".format(module), file=sys.stderr)
+                    print("Could not register '{0}', for it is missing the 'register' function".format(module),
+                          file=sys.stderr)
             except Exception as e:
                 print("Error registering module '{0}'".format(module.__name__))
                 traceback.print_exc()
         return len(modules)
 
-    
     def get_current_channel(self):
         """Get the client's current channel (dict)"""
         try:
@@ -207,12 +213,9 @@ class MumbleJumble:
             print('Currently assuming bot is in channel 0, try moving it')
             return self.client.channels[0]
     
-    
     def send_msg_current_channel(self, msg):
         """Send a message in the client's current channel"""
-        channel = self.get_current_channel()
-        channel.send_text_message(msg)
-
+        self.get_current_channel().send_text_message(msg)
 
     def command_received(self, text):
         """Main function that reads commands in chat and outputs accordingly
@@ -222,16 +225,11 @@ class MumbleJumble:
         if message[0].startswith('!'):
             command = message[0][1:]
             arguments = ''.join(message[1]).strip(' ') if len(message) > 1 else ''
-
-            # Module loaded commands
-            if command in self.registered_commands.keys():
+            try:
                 self.registered_commands[command](self, command, arguments)
+            except KeyError:
+                pass
      
-
-    def append_audio(self, audio_file, audio_title, branchname=None, pipe=False):
-        self.queue.append_audio((audio_file, audio_title, branchname, pipe))
-
-
     def audio_loop(self):
         """Main loop that sends audio samples to the server. Sends the first
         """
@@ -287,52 +285,49 @@ class FfmpegThread(threading.Thread):
         self.parent = parent
         self.daemon = True
 
-
     def run(self):
         while True:
             if self.parent.queue.ffmpeg:
-                # A queue element is (file, title, branch name, pipe)
-                leaf = handles.Leaf(self.parent.queue.ffmpeg[0][0], self.parent.queue.ffmpeg[0][1])
-                branchname = self.parent.queue.ffmpeg[0][2]
                 try:
-                    self.process(leaf, self.parent.queue.ffmpeg[0][3])
-                    if branchname is None:
-                        self.parent.queue.append_leaf(leaf)
-                    else:
-                        branch = handles.Branch(branchname, leaf)
-                        self.parent.queue.append_leaf(leaf, branch)
-                    self.parent.queue.remove_audio()
-                except Exception as e:
-                    print(e)
+                    leaf = self.parent.queue.ffmpeg[0].leaves[0]
+                except AttributeError:
+                    leaf = self.parent.queue.ffmpeg[0]
+                try:
+                    process(leaf)
+                    self.parent.queue.append_leaf(leaf)
+                except AssertionError:
+                    self.parent.send_msg_current_channel(u'Could not process <b>{0}</b>'.format(leaf.title))
+                finally:
                     self.parent.queue.remove_audio()
             else:
                 time.sleep(0.5)
 
 
-    def process(self, leaf, pipe):
-        """ Converts and splits the song into the suitable format to stream to
-        mumble server (mono PCM 16 bit little-endian), using ffmpeg
-        """
-        command = ['ffmpeg', '-nostdin', '-i', '-', '-f', 's16le', '-acodec', 
-                   'pcm_s16le', '-ac', '1', '-ar', '48000', '-']
-        if pipe:
-            p = sp.Popen(command, stdin=sp.PIPE, stdout=sp.PIPE, stderr=sp.PIPE)
-            stdout, stderr = p.communicate(input=leaf.file)
-        else:
-            command[3] = leaf.file
-            p = sp.Popen(command, stdout=sp.PIPE, stderr=sp.PIPE)
-            stdout, stderr = p.communicate()
-        print(stderr)
-        counter = 1
-        start = stderr.rfind('time=')
-        leaf.duration = stderr[start + 5:start + 17]
-        with io.BytesIO(stdout) as out:
-            while True:
-                leaf.samples[counter] = out.read(88200)
-                if not leaf.samples[counter]:   #If last fragment is empty
-                    leaf.total_samples = counter
-                    return
-                counter += 1
+def process(leaf):
+    """ Converts and splits the song into the suitable format to stream to
+    mumble server (mono PCM 16 bit little-endian), using ffmpeg
+    """
+    command = ['ffmpeg', '-nostdin', '-i', '-', '-f', 's16le', '-acodec',
+               'pcm_s16le', '-ac', '1', '-ar', '48000', '-']
+    if leaf.pipe:
+        p = sp.Popen(command, stdin=sp.PIPE, stdout=sp.PIPE, stderr=sp.PIPE)
+        stdout, stderr = p.communicate(input=leaf.file)
+    else:
+        command[3] = leaf.file
+        p = sp.Popen(command, stdout=sp.PIPE, stderr=sp.PIPE)
+        stdout, stderr = p.communicate()
+    print(stderr)
+    assert len(stdout) > 0
+    counter = 1
+    start = stderr.rfind('time=')
+    leaf.duration = stderr[start + 5:start + 17]
+    with io.BytesIO(stdout) as out:
+        while True:
+            leaf.samples[counter] = out.read(88200)
+            if not leaf.samples[counter]:  # If last fragment is empty
+                leaf.total_samples = counter
+                return
+            counter += 1
 
 
 class LoopThread(threading.Thread):
@@ -351,33 +346,38 @@ class LoopThread(threading.Thread):
                     if counter % module.loop.time == 0:
                         module.loop(self.parent)
 
+
 class Queues:
     def __init__(self):
         self.ffmpeg = []
         self.audio = []
 
     def __iter__(self):
-        for i in self.ffmpeg:
+        for i in self.audio:
             yield i
-        for j in self.audio:
+        for j in self.ffmpeg:
             yield j
 
-    def append_audio(self, data):
-        # A ffmpeg element is (file, title, branch name, pipe)
-        self.ffmpeg.append(data)
+    def append_audio(self, audio_file, audio_title, branchname=None, pipe=False):
+        leaf = handles.Leaf(audio_file, audio_title, pipe)
+        if branchname is not None:
+            branch = handles.Branch(branchname, leaf)
+            self.ffmpeg.append(branch)
+        else:
+            self.ffmpeg.append(leaf)
 
     def remove_audio(self):
         del self.ffmpeg[0]
 
-    def append_leaf(self, leaf, branch=None):
-        if branch is None:
+    def append_leaf(self, leaf):
+        if leaf.branch is None:
             self.audio.append(leaf)
         else:
-            for i, x in enumerate(self.audio):
-                if x.title == branch.title:
-                    self.audio[i].append(leaf)
+            for i in self.audio:
+                if i.title == leaf.branch.title and isinstance(i, handles.Branch):
+                    i.append(leaf)
                     return
-            self.audio.append(branch)
+            self.audio.append(leaf.branch)
 
     def delete_leaf(self, leaf_index, branch_index=None):
         if branch_index is None:
@@ -392,26 +392,22 @@ class Queues:
 
     def build_mirror(self):
         mirror = {}
-        if self.audio:
-            for i in self.audio:
-                if isinstance(i, handles.Branch):
+        for i in self:
+            if isinstance(i, handles.Branch):
+                try:
+                    for leaf in i:
+                        mirror[i.title].append(leaf.title)
+                except KeyError:
                     mirror[i.title] = [leaf.title for leaf in i]
-                else:
+            else:
+                try:
+                    mirror[i.title] += 1
+                except KeyError:
                     mirror[i.title] = 1
-
-        if self.ffmpeg:
-            for j in self.ffmpeg:
-                if j[2] is None:
-                    mirror[j[1]] = 1
-                else:
-                    try:
-                        mirror[j[2]].append(j[1])
-                    except KeyError:
-                        mirror[j[2]] = [j[1]]
         return mirror
 
-
     def clear(self):
+        #TODO fix cause it keeps failing with current ffmpeg thread
         self.ffmpeg = []
         self.audio = []
 

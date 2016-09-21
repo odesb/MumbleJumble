@@ -1,13 +1,14 @@
 class Leaf:
     """Represents an audio file sent to the server by MumbleJumble"""
-    def __init__(self, audio_file, audio_title):
+    def __init__(self, audio_file, audio_title, pipe):
         self.file = audio_file
         self.title = audio_title
+        self.branch = None
+        self.pipe = pipe
         self.duration = None
         self.total_samples = None
         self.samples = {}
         self.current_sample = 1
-        self.branch = None
 
 
     def get_sample_length(self):
@@ -56,7 +57,6 @@ class Branch:
 
     def remove_leaf(self, index):
         del self.leaves[index]
-
 
 
 def duration2sec(duration):

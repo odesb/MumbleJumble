@@ -30,7 +30,7 @@ def call(bot, command, arguments):
 
 
 def loop(bot):
-    trigger = random.random() * 100
+    trigger = random.randint(0, 100)
     if 0 <= trigger <= loop.chance:
         bot.send_msg_current_channel(random.choice(SPEECH))
 

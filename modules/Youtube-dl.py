@@ -155,10 +155,10 @@ class PlaylistThread(SingleThread):
                 self.current_title = None
                 time.sleep(0.5)
                 try:
-                    mirror = self.parent.queue.build_mirror()
+                    mirror = self.parent.build_mirror()
                     while len(mirror[branchname]) >= self.buffer_size:
                         time.sleep(2)
-                        mirror = self.parent.queue.build_mirror()
+                        mirror = self.parent.build_mirror()
                 except KeyError:
                     break
             del self.new_audio[0]
