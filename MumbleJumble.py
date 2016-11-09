@@ -108,7 +108,7 @@ class MumbleJumble:
         except (KeyError, ValueError):
             self.volume = 1.00
         self.quiet = pymumble_parameters['quiet']  # Is in this dict since it is a cmd line arg
-                                                    # Will change it if there are more cmd line args in the future
+                                                   # Will change it if there are more cmd line args in the future
         self.paused = False
         self.skipLeaf = False
         self.skipBranch = False

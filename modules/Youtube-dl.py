@@ -133,6 +133,14 @@ class PlaylistThread(SingleThread):
             info = self.new_audio[0][1]
             branchname = info['title'] + '<b> - PLAYLIST</b>'
             self.new_audio[0] = [('https://www.youtube.com/watch?v=' + x['url'], x['title']) for x in info['entries']]
+            playlist_path = os.path.join(self.dl_folder, info['title'])
+            if self.download:
+                if not os.path.exists(playlist_path):
+                    try: 
+                        os.mkdir(playlist_path)
+                    except OSError:
+                        print('Cannot create download folder for current playlist, aborting!')
+                    return
 
             while self.new_audio[0]:
                 if register.shuffle:
@@ -141,12 +149,6 @@ class PlaylistThread(SingleThread):
                     current = self.new_audio[0][0]
                 self.current_title = current[1]
                 if self.download:
-                    playlist_path = os.path.join(self.dl_folder, info['title'])
-                    try:
-                        os.mkdir(playlist_path)
-                    except OSError:
-                        print('Cannot create download folder for current playlist, aborting!')
-                        return
                     file_path = os.path.join(playlist_path, self.current_title)
                     self.dl_and_append(current[0], file_path, self.current_title, branchname)
                 else:
