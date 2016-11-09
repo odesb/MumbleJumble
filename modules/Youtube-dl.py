@@ -140,7 +140,7 @@ class PlaylistThread(SingleThread):
                         os.mkdir(playlist_path)
                     except OSError:
                         print('Cannot create download folder for current playlist, aborting!')
-                    return
+                        return
 
             while self.new_audio[0]:
                 if register.shuffle:
