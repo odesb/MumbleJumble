@@ -22,6 +22,6 @@
 		}
 	},
 	"localplay":{
-		"local_folder":".song_library/"
+		"local_folder":""
 	}
 }
