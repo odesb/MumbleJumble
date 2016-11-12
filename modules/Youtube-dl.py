@@ -133,8 +133,8 @@ class PlaylistThread(SingleThread):
             info = self.new_audio[0][1]
             branchname = info['title'] + '<b> - PLAYLIST</b>'
             self.new_audio[0] = [('https://www.youtube.com/watch?v=' + x['url'], x['title']) for x in info['entries']]
-            playlist_path = os.path.join(self.dl_folder, info['title'])
             if self.download:
+                playlist_path = os.path.join(self.dl_folder, info['title'])
                 if not os.path.exists(playlist_path):
                     try: 
                         os.mkdir(playlist_path)
