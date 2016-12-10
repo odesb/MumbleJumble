@@ -17,7 +17,7 @@ import handles
 SCRIPTPATH = os.path.dirname(__file__)
 # Add pymumble folder to python PATH for importing
 sys.path.append(os.path.join(SCRIPTPATH, 'pymumble'))
-import pymumble
+import pymumble_py3 as pymumble
 
 PIDFILE = '/tmp/mj.pid'
 
@@ -115,7 +115,11 @@ class MumbleJumble:
         self.reload_count = 0
         self.client.is_ready()  # Wait for the connection
         self.client.set_bandwidth(200000)
-        self.client.users.myself.unmute()  # Be sure the client is not muted
+        try:
+            self.client.users.myself.unmute()  # Be sure the client is not muted
+        except AttributeError:
+            # Raises AttributeError if it hasn't connected to the server
+            sys.exit('Could not connect to server, are you sure it is set properly?')
         with open(os.path.join(SCRIPTPATH, 'comment')) as comment:
             self.client.users.myself.comment(comment.read())
 
@@ -320,7 +324,7 @@ def process(leaf):
     print(stderr)
     assert len(stdout) > 0
     counter = 1
-    start = stderr.rfind('time=')
+    start = stderr.rfind(b'time=')
     leaf.duration = stderr[start + 5:start + 17]
     with io.BytesIO(stdout) as out:
         while True:

@@ -1,4 +1,4 @@
-from __future__ import unicode_literals
+import sys
 import os
 import re
 import random
@@ -30,10 +30,6 @@ def call(bot, command, arguments):
         register.localplayer.ls()
         arguments = random.randint(1, len(register.localplayer.file_l)) 
         play_music(bot, arguments)
-
-
-
-
 
 
 def play_music(bot, arguments):
@@ -102,18 +98,18 @@ class LocalPlayer:
                 self.dir_l.append(element)
             else:
                 self.file_l.append(element)
-        dir_l_sorted = sorted(self.dir_l, key=unicode.lower)
-        file_l_sorted = sorted(self.file_l, key=unicode.lower)
+        dir_l_sorted = sorted(self.dir_l, key=str.lower)
+        file_l_sorted = sorted(self.file_l, key=str.lower)
         l = dir_l_sorted + file_l_sorted
         
         clean_l = []
-        for x in range(len(l) / 20):
+        for x in range(len(l) // 20):
             clean_l.append('')
         if len(l) % 20 != 0:
             clean_l.append('')
         counter = 1
         for i in range(len(l)):
-            j = i / 20
+            j = i // 20
             if os.path.islink(os.path.join(self.working_path(), l[i])):
                 clean_l[j] += '<br /><b><font color=#5fa5e0>{0}</font></b>'.format(l[i])
             elif os.path.isdir(os.path.join(self.working_path(), l[i])):
